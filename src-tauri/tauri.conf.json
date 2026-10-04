@@ -13,6 +13,7 @@
     "windows": [
       {
         "label": "search",
+        "create": false,
         "title": "Search Short",
         "width": 652,
         "height": 88,
@@ -32,6 +33,7 @@
       },
       {
         "label": "settings",
+        "create": false,
         "title": "Settings — Search Short",
         "url": "settings.html",
         "width": 520,

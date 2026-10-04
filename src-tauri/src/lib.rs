@@ -41,8 +41,19 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
+            // State is managed before any webview exists, so the first
+            // `get_settings` call from the frontend can never race it. See
+            // `window::creation` for why the windows are built here instead of
+            // by Tauri's own setup pass.
             let settings = store::load(&handle);
             let shortcut = ShortcutState::new(settings.global_shortcut.clone());
+
+            app.manage(SettingsState::new(settings));
+            app.manage(shortcut);
+
+            window::create_windows(app)?;
+
+            let shortcut = app.state::<ShortcutState>();
             if let Err(error) = shortcut.register(&handle) {
                 // A shortcut conflict must not stop the app from starting; the
                 // tray icon keeps it reachable and the error is surfaced in
@@ -51,14 +62,11 @@ pub fn run() {
                 shortcut.set_error(error);
             }
 
-            app.manage(SettingsState::new(settings));
-            app.manage(shortcut);
-
             if let Err(error) = system::tray::setup(&handle) {
                 log::warn!("tray icon unavailable: {}", error.message);
             }
 
-            // The window is created hidden and only shown by the global
+            // The windows are created hidden and only shown by the global
             // shortcut or the tray menu, so startup stays silent.
             Ok(())
         })

@@ -210,8 +210,8 @@ mod tests {
     fn every_engine_icon_exists_on_disk() {
         // A missing icon renders as a broken image in the settings picker, and
         // nothing else would catch it.
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../public/icons-search-engine");
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../public/icons-search-engine");
 
         for engine in all() {
             let path = dir.join(engine.icon);
@@ -223,6 +223,51 @@ mod tests {
                 path.display()
             );
         }
+    }
+
+    #[test]
+    fn engine_icons_are_not_absurdly_large() {
+        // Icons render at ~17px. A multi-megapixel source decodes to tens of
+        // megabytes of RGBA and costs that on every launch for no visible gain.
+        //
+        // This checks pixel dimensions rather than file size: compression can
+        // make a huge image look small on disk (a 3840x3840 WebP here was only
+        // 51 KB while decoding to ~56 MB), so bytes are the wrong proxy.
+        const MAX_DIMENSION: u32 = 512;
+
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../public/icons-search-engine");
+
+        for engine in all() {
+            let path = dir.join(engine.icon);
+            let (width, height) = png_dimensions(&path)
+                .unwrap_or_else(|e| panic!("cannot read dimensions of {}: {e}", path.display()));
+
+            assert!(
+                width <= MAX_DIMENSION && height <= MAX_DIMENSION,
+                "icon {} is {width}x{height}; it renders at ~17px, so normalise it \
+                 to at most {MAX_DIMENSION}px on its longest side",
+                engine.icon
+            );
+        }
+    }
+
+    /// Reads width and height from a PNG's IHDR chunk.
+    fn png_dimensions(path: &std::path::Path) -> Result<(u32, u32), String> {
+        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+
+        // 8-byte signature, then the IHDR chunk: 4-byte length, "IHDR",
+        // 4-byte width, 4-byte height.
+        if bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" {
+            return Err("not a PNG".to_string());
+        }
+        if &bytes[12..16] != b"IHDR" {
+            return Err("missing IHDR".to_string());
+        }
+
+        let width = u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        let height = u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]);
+        Ok((width, height))
     }
 
     #[test]

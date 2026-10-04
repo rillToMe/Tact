@@ -62,8 +62,9 @@ it, so the shortcut keeps working in the background.
 
 - **Global shortcut** — click the recorder and press a combination. The
   shortcut is released while recording so you can reuse the current one.
-- **Search engine** — Google today; the engine list is data, so more can be
-  added without touching the search flow.
+- **Search engine** — Google, Bing, DuckDuckGo, Yahoo, or Yandex. The picker
+  shows each engine's logo, and the active engine's logo appears in the search
+  window. Adding another engine is one entry in the registry (see below).
 - **Theme** — System, Light, or Dark.
 
 ## Architecture
@@ -99,6 +100,27 @@ Key decisions:
   reads.
 - **Errors are user-facing.** Commands return `{ code, message }`; technical
   detail is logged, never shown in the UI.
+
+### Adding a search engine
+
+The engine list is data, not code. Add one entry to `ENGINES` in
+`src-tauri/src/search/engine.rs`:
+
+```rust
+SearchEngine {
+    id: "brave",
+    name: "Brave",
+    search_url: "https://search.brave.com/search?q={query}",
+    icon: "brave.png",
+},
+```
+
+Then drop the icon in `public/icons-search-engine/`. Nothing else changes: the
+frontend reads the list over IPC and renders whatever it is given.
+
+Two tests fail the build if an icon is wrong: one if the file is missing, one if
+it is oversized. Keep sources small — the icons render at 17px, and a 3840x3840
+source decodes to ~56 MB of RGBA for something that size.
 
 ### Security notes
 
