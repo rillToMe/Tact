@@ -10,6 +10,14 @@ pub enum ErrorCode {
     WindowUnavailable,
     EmptyQuery,
     Internal,
+    /// AI is switched on but the base URL or model is still empty.
+    AiNotConfigured,
+    /// No API key has been stored for the AI provider.
+    AiKeyMissing,
+    /// The Windows Credential Manager could not be read or written.
+    AiKeyUnavailable,
+    /// The provider was reached but refused, or could not be reached at all.
+    AiRequestFailed,
 }
 
 /// The only error shape that ever crosses the IPC boundary.

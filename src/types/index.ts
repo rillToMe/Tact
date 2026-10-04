@@ -1,11 +1,26 @@
 export type Theme = "system" | "light" | "dark";
 
+export interface AiSettings {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  systemPrompt: string;
+  /**
+   * `KeyboardEvent.code` of the key that switches the search bar into AI mode.
+   *
+   * Unlike the global shortcut this is handled inside the window, so a bare key
+   * such as `Tab` is valid and is the default.
+   */
+  modeKey: string;
+}
+
 export interface Settings {
   schemaVersion: number;
   globalShortcut: string;
   searchEngine: string;
   theme: Theme;
   launchAtLogin: boolean;
+  ai: AiSettings;
 }
 
 export interface SearchEngine {
@@ -23,7 +38,11 @@ export type ErrorCode =
   | "openUrlFailed"
   | "windowUnavailable"
   | "emptyQuery"
-  | "internal";
+  | "internal"
+  | "aiNotConfigured"
+  | "aiKeyMissing"
+  | "aiKeyUnavailable"
+  | "aiRequestFailed";
 
 export interface AppError {
   code: ErrorCode;
@@ -40,4 +59,23 @@ export interface ShortcutStatus {
 export interface SettingsPayload {
   settings: Settings;
   shortcut: ShortcutStatus;
+  /**
+   * Whether an API key is stored in the Windows Credential Manager.
+   *
+   * The key itself never crosses the IPC boundary, so this boolean is the only
+   * way the UI can report that one is saved.
+   */
+  apiKeySet: boolean;
 }
+
+/** One turn of an AI conversation, as sent to the provider. */
+export interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+/** A piece of a streamed reply, tagged so the handler can switch on `type`. */
+export type ChatEvent =
+  | { type: "delta"; text: string }
+  | { type: "reasoning"; text: string }
+  | { type: "done"; reason: string | null };

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::ai::model::AiSettings;
 use crate::search::engine;
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -46,6 +47,8 @@ pub struct Settings {
     /// Reserved for the next iteration (Start with Windows). It is stored now
     /// so enabling it later needs no migration, and no UI pretends it works.
     pub launch_at_login: bool,
+    /// AI chat. Disabled by default, and its API key is not stored here.
+    pub ai: AiSettings,
 }
 
 impl Default for Settings {
@@ -56,6 +59,7 @@ impl Default for Settings {
             search_engine: DEFAULT_SEARCH_ENGINE.into(),
             theme: Theme::default(),
             launch_at_login: false,
+            ai: AiSettings::default(),
         }
     }
 }
@@ -83,6 +87,8 @@ impl Settings {
             );
             self.search_engine = DEFAULT_SEARCH_ENGINE.into();
         }
+
+        self.ai = self.ai.normalized();
 
         self
     }
@@ -183,5 +189,31 @@ mod tests {
         assert_eq!(value["searchEngine"], "google");
         assert_eq!(value["theme"], "system");
         assert_eq!(value["launchAtLogin"], false);
+        assert_eq!(value["ai"]["enabled"], false);
+        assert_eq!(value["ai"]["modeKey"], "Tab");
+    }
+
+    #[test]
+    fn a_settings_file_without_the_ai_block_still_loads() {
+        // Every field is sent back on save, so a file written by a build that
+        // predates AI must deserialize into a disabled AI block rather than
+        // failing and resetting the user's other preferences.
+        let settings = from_json(r#"{"theme":"dark","searchEngine":"bing"}"#);
+        assert_eq!(settings.theme, Theme::Dark);
+        assert_eq!(settings.search_engine, "bing");
+        assert!(!settings.ai.enabled);
+        assert_eq!(settings.ai.mode_key, "Tab");
+    }
+
+    #[test]
+    fn ai_settings_are_normalized_with_the_rest() {
+        let settings = from_json(
+            r#"{"ai":{"enabled":true,"baseUrl":"https://a.test/v1/","model":" gpt-4o ","modeKey":"Enter"}}"#,
+        );
+        assert!(settings.ai.enabled);
+        assert_eq!(settings.ai.base_url, "https://a.test/v1");
+        assert_eq!(settings.ai.model, "gpt-4o");
+        // A key that cannot toggle must be repaired even when it arrives nested.
+        assert_eq!(settings.ai.mode_key, "Tab");
     }
 }

@@ -1,3 +1,4 @@
+mod ai;
 mod commands;
 mod error;
 mod search;
@@ -81,9 +82,13 @@ pub fn run() {
             commands::capture_shortcut,
             commands::submit_search,
             commands::hide_search_window,
+            commands::set_search_expanded,
             commands::open_settings_window,
             commands::hide_settings_window,
             commands::quit_app,
+            commands::set_ai_api_key,
+            commands::clear_ai_api_key,
+            commands::send_chat_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

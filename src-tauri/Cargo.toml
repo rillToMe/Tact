@@ -27,3 +27,25 @@ tauri-plugin-global-shortcut = "2.4.0"
 tauri-plugin-opener = "2.7.0"
 tauri-plugin-store = "2.5.0"
 percent-encoding = "2"
+
+# AI chat against a user-supplied OpenAI-compatible endpoint.
+#
+# `byot` (bring your own types) is deliberate. The typed API pins the exact
+# OpenAI request and response shapes, but "OpenAI-compatible" is a spectrum:
+# providers differ in the margins by omitting fields, adding fields, or
+# returning a different `finish_reason`. Deserialising into our own tolerant
+# types - every field optional - is what lets one code path serve OpenRouter,
+# Ollama, LM Studio, Groq and friends without per-provider special cases.
+# async-openai still does the valuable part: HTTP transport, auth headers and
+# SSE framing.
+async-openai = { version = "0.42.1", default-features = false, features = [
+    "chat-completion",
+    "byot",
+    "rustls",
+] }
+futures-util = "0.3"
+
+# API keys live in the Windows Credential Manager, never in settings.json.
+# The default `v1` feature selects the platform store automatically, which on
+# Windows is `windows-native-keyring-store`.
+keyring = "4.2.0"

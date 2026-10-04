@@ -4,6 +4,7 @@
 
 @theme inline {
   --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
 
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);
@@ -18,6 +19,19 @@
   --color-accent-soft: var(--accent-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+
+  /* Markdown content colours. These are the only places colour appears in a
+     reply, and each marks a different kind of thing: structure (headings),
+     emphasis (strong), and code. */
+  --color-heading: var(--heading);
+  --color-strong: var(--strong);
+  --color-table-head: var(--table-head);
+
+  /* Code surfaces. Distinct from the generic sunken surface so a code block
+     reads as a different kind of thing, not just a slightly darker panel. */
+  --color-code-surface: var(--code-surface);
+  --color-code-inline: var(--code-inline);
+  --color-code-inline-fg: var(--code-inline-fg);
 
   --radius-surface: 10px;
   --radius-control: 7px;
@@ -35,14 +49,24 @@
  * 1. Borders are alpha, not solid greys. A translucent white edge sits
  *    correctly on any surface behind it, which is what keeps a floating dark
  *    panel from looking like a flat grey box.
- * 2. The palette is neutral charcoal with no blue or purple tint. Colour is
- *    reserved for state (focus, error), never for the surface itself.
+ * 2. The chrome palette is neutral charcoal with no blue or purple tint, so the
+ *    accent stays meaningful. Colour is used for state (focus, error) and for
+ *    content - headings, code, syntax - but never for the surface itself.
+ *
+ * The `--syn-*` tokens are the syntax palette. They are defined per theme
+ * rather than by importing a highlight.js stylesheet, so the code colours are
+ * tuned for the same surfaces as everything else instead of assuming a
+ * standalone editor.
  */
 :root {
   color-scheme: light;
 
   --font-ui: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui,
     -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Cascadia Code ships with Windows Terminal and VS; Consolas is the
+     universal fallback on Windows. */
+  --font-code: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace,
+    "SF Mono", Menlo, monospace;
 
   --surface: #ffffff;
   --surface-elevated: #ffffff;
@@ -59,6 +83,32 @@
   --accent-soft: rgb(59 111 212 / 0.14);
   --danger: #c8342f;
   --danger-soft: rgb(200 52 47 / 0.12);
+
+  /* Headings lean blue so an answer's structure is visible at a glance;
+     `strong` is a warmer ink that reads as emphasis without competing with the
+     accent used for links and headings. */
+  --heading: #2b4a86;
+  --strong: #8a4b1f;
+  --table-head: #f0f3f8;
+
+  /* Code surfaces. A code block is a different kind of content, not just a
+     slightly darker panel, so it gets its own surface rather than reusing
+     `--surface-sunken`. */
+  --code-surface: #f6f8fa;
+  --code-inline: rgb(59 111 212 / 0.1);
+  --code-inline-fg: #2f5bb7;
+
+  /* Syntax palette, tuned for a light code surface. */
+  --syn-fg: #383a42;
+  --syn-comment: #a0a1a7;
+  --syn-keyword: #a626a4;
+  --syn-string: #50a14f;
+  --syn-number: #986801;
+  --syn-function: #4078f2;
+  --syn-type: #c18401;
+  --syn-variable: #e45649;
+  --syn-punct: #696c77;
+
   --shadow-surface: 0 0 0 1px rgb(0 0 0 / 0.03), 0 1px 2px rgb(0 0 0 / 0.07),
     0 14px 32px -8px rgb(0 0 0 / 0.2);
   --shadow-popup: 0 0 0 1px rgb(0 0 0 / 0.04), 0 2px 6px rgb(0 0 0 / 0.1),
@@ -83,6 +133,30 @@
   --accent-soft: rgb(92 143 219 / 0.18);
   --danger: #e8635c;
   --danger-soft: rgb(232 99 92 / 0.16);
+
+  /* Lifted rather than darkened: on a dark surface, structure has to come from
+     luminance, and a darker heading would disappear into the panel. */
+  --heading: #a8c7f5;
+  --strong: #e8b98a;
+  --table-head: #26262a;
+
+  /* Recessed below the panel rather than raised above it, so code reads as an
+     inset well on a dark surface. */
+  --code-surface: #1e1e22;
+  --code-inline: rgb(92 143 219 / 0.16);
+  --code-inline-fg: #8fb8f0;
+
+  /* Syntax palette, tuned for a dark code surface. */
+  --syn-fg: #d4d4d8;
+  --syn-comment: #6b7280;
+  --syn-keyword: #c678dd;
+  --syn-string: #98c379;
+  --syn-number: #d19a66;
+  --syn-function: #61afef;
+  --syn-type: #e5c07b;
+  --syn-variable: #e06c75;
+  --syn-punct: #9ca3af;
+
   --shadow-surface: 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4),
     0 18px 40px -10px rgb(0 0 0 / 0.6);
   --shadow-popup: 0 0 0 1px rgb(0 0 0 / 0.5), 0 4px 12px rgb(0 0 0 / 0.45),
@@ -136,5 +210,431 @@ button {
   .focus-ring:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+}
+
+/*
+ * Syntax highlighting.
+ *
+ * `rehype-highlight` emits the standard highlight.js class names, so the
+ * palette is mapped onto them here rather than by importing a highlight.js
+ * theme. Two reasons: a stock theme ships its own background and padding, which
+ * would fight the panel's surface; and its colours are chosen for a standalone
+ * editor, not for text at 11.5px inside a floating window.
+ *
+ * Only the token classes the `common` language set actually emits are listed.
+ * Anything unlisted inherits `--syn-fg`, so an unrecognised token stays legible
+ * instead of turning into unstyled black or white.
+ */
+.hljs {
+  color: var(--syn-fg);
+  background: transparent;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-name,
+.hljs-meta .hljs-keyword {
+  color: var(--syn-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--syn-string);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-meta {
+  color: var(--syn-number);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-selector-id {
+  color: var(--syn-function);
+}
+
+.hljs-type,
+.hljs-title.class_,
+.hljs-built_in,
+.hljs-class .hljs-title,
+.hljs-selector-class {
+  color: var(--syn-type);
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr,
+.hljs-params,
+.hljs-property,
+.hljs-deletion,
+.hljs-subst {
+  color: var(--syn-variable);
+}
+
+.hljs-punctuation,
+.hljs-operator {
+  color: var(--syn-punct);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+/* Added by highlight.js to mark the matched substring in a search result. */
+.hljs-addition {
+  background: rgb(80 161 79 / 0.15);
+}
+
+.hljs-deletion {
+  background: rgb(224 108 117 / 0.15);
+}
+
+/*
+ * Thought line: the live "thinking" indicator above an AI reply.
+ *
+ * Adapted from the React Bits `ThoughtLine` micro-interaction. Three changes
+ * from the original, all deliberate:
+ *
+ * 1. The breath and settle animations are plain CSS keyframes. The original
+ *    drives them with `motion`, but both are simple opacity/keyframe tweens, so
+ *    a 750 KB animation runtime would buy nothing here.
+ * 2. The three Hugeicons glyphs are inlined as SVG. The icon package is 80 MB
+ *    unpacked for the sake of those three shapes.
+ * 3. Colours come from the app's design tokens rather than being passed in, so
+ *    the line follows the light/dark theme automatically.
+ *
+ * The collapse uses the `grid-template-rows: 0fr -> 1fr` technique rather than
+ * a max-height guess, so it animates to the trace's true height.
+ */
+.thought-line {
+  --tl-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --tl-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --tl-settle: 320ms;
+  --tl-blur: 2px;
+  --tl-shimmer: 1.8s;
+  --tl-done: 0.72;
+
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.thought-line__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  outline: none;
+  cursor: default;
+}
+
+.thought-line__head[data-toggle] {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.thought-line__head[data-toggle]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.thought-line__glyph {
+  display: inline-flex;
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  color: var(--accent);
+}
+
+/* The glyph breathes while the model works, which is what makes the line read
+   as alive rather than as a static label. */
+.thought-line[data-working] .thought-line__glyph {
+  animation: thought-line-breath 1.6s var(--tl-ease-in-out) infinite;
+}
+
+@keyframes thought-line-breath {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.94);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.thought-line__glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The label swaps between "Thinking…" and "Thought for 2.4s" in place: both
+   occupy the same grid cell, so the line never reflows mid-swap. */
+.thought-line__label {
+  display: inline-grid;
+}
+
+.thought-line__text {
+  grid-area: 1 / 1;
+  width: max-content;
+  opacity: 0;
+  filter: blur(var(--tl-blur));
+  transition:
+    opacity var(--tl-settle) var(--tl-ease-out),
+    filter var(--tl-settle) var(--tl-ease-out);
+}
+
+.thought-line__text[data-active] {
+  opacity: 1;
+  filter: blur(0);
+}
+
+.thought-line__text--done[data-active] {
+  opacity: var(--tl-done);
+}
+
+.thought-line__breath {
+  display: inline-block;
+}
+
+/* The shimmer sweep, only while the model is still working. */
+.thought-line[data-working] .thought-line__breath {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--text-muted) 50%, transparent) 30%,
+    var(--text-primary) 50%,
+    color-mix(in srgb, var(--text-muted) 50%, transparent) 70%
+  );
+  background-size: 250% 100%;
+  background-position: 125% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: thought-line-shimmer var(--tl-shimmer) linear infinite;
+}
+
+@keyframes thought-line-shimmer {
+  to {
+    background-position: -125% 0;
+  }
+}
+
+.thought-line__timer {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+  transition: opacity var(--tl-settle) ease;
+}
+
+.thought-line__timer[data-done] {
+  opacity: var(--tl-done);
+}
+
+.thought-line__chevron {
+  display: inline-flex;
+  margin-left: 0.1em;
+  opacity: 0;
+  transition:
+    opacity 200ms ease,
+    transform 200ms var(--tl-ease-out);
+}
+
+.thought-line__chevron[data-on] {
+  opacity: 0.55;
+}
+
+.thought-line[data-open] .thought-line__chevron {
+  transform: rotate(180deg);
+}
+
+/* Announcements for screen readers; visually hidden. */
+.thought-line__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.thought-line__trace {
+  display: grid;
+  grid-template-rows: 0fr;
+  width: 0;
+  min-width: 100%;
+  transition: grid-template-rows var(--tl-settle) var(--tl-ease-out);
+}
+
+.thought-line__trace[data-open] {
+  grid-template-rows: 1fr;
+}
+
+/* Capped so a long trace cannot push the reply out of view; it scrolls
+   instead. `overflow-y: clip` is what lets the row animation work. */
+.thought-line__fold {
+  min-height: 0;
+  max-height: 132px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.thought-line__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  padding: 0.6em 0 0.2em 0.15em;
+  font-size: 0.96em;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.thought-line__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  /* The marker is sized in `em` and the text is multi-line, so the tick is
+     nudged onto the first line's optical centre rather than the box's. */
+  color: var(--text-muted);
+  animation: thought-line-step-in 240ms var(--tl-ease-out) both;
+}
+
+/* A step fades in as it appears. Without this the list pops in one line at a
+   time, which reads as flicker rather than as progress. */
+@keyframes thought-line-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.thought-line__mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1.45em;
+  color: var(--accent);
+  opacity: 0.65;
+}
+
+/* Completed steps step back so the eye lands on the one still being written. */
+.thought-line__step[data-active] .thought-line__mark {
+  opacity: 1;
+}
+
+.thought-line__mark svg {
+  display: block;
+  width: 0.72em;
+  height: 0.72em;
+}
+
+.thought-line__step-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The step being written is at full contrast; the ones already done are
+   dimmed, which is what makes the list read as a sequence rather than a blob. */
+.thought-line__step-text {
+  color: var(--text-muted);
+  opacity: 0.7;
+  transition: opacity var(--tl-settle) ease;
+}
+
+.thought-line__step[data-active] .thought-line__step-text {
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.thought-line__pulse {
+  display: block;
+  width: 0.4em;
+  height: 0.4em;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: thought-line-pulse 1.6s var(--tl-ease-in-out) infinite;
+}
+
+@keyframes thought-line-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thought-line__text {
+    filter: none !important;
+    transition: opacity var(--tl-settle) ease;
+  }
+
+  .thought-line__timer,
+  .thought-line__chevron {
+    transition: opacity var(--tl-settle) ease;
+  }
+
+  .thought-line[data-working] .thought-line__breath {
+    animation: none;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+    background: none;
+  }
+
+  .thought-line[data-working] .thought-line__glyph {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .thought-line__step {
+    animation: none;
+  }
+
+  .thought-line__pulse {
+    animation-duration: 2.4s;
   }
 }

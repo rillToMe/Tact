@@ -1,7 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   AppError,
+  ChatEvent,
+  ChatMessage,
   SearchEngine,
   Settings,
   SettingsPayload,
@@ -51,6 +53,40 @@ export const ipc = {
 
   async hideSearchWindow(): Promise<void> {
     return invoke("hide_search_window");
+  },
+
+  /** Grows or shrinks the search window between search bar and AI panel. */
+  async setSearchExpanded(expanded: boolean): Promise<void> {
+    return invoke("set_search_expanded", { expanded });
+  },
+
+  /**
+   * Stores the AI API key in the Windows Credential Manager.
+   *
+   * The key is written straight to the OS store and is never persisted in
+   * `settings.json`, so it is absent from every settings payload.
+   */
+  async setAiApiKey(apiKey: string): Promise<void> {
+    return invoke("set_ai_api_key", { apiKey });
+  },
+
+  async clearAiApiKey(): Promise<void> {
+    return invoke("clear_ai_api_key");
+  },
+
+  /**
+   * Streams a chat completion, calling `onEvent` for every token.
+   *
+   * Uses a channel rather than a global event so the stream is scoped to this
+   * call: no listener is left behind if the window is hidden mid-reply.
+   */
+  async sendChatMessage(
+    messages: ChatMessage[],
+    onEvent: (event: ChatEvent) => void,
+  ): Promise<void> {
+    const onEventChannel = new Channel<ChatEvent>();
+    onEventChannel.onmessage = onEvent;
+    return invoke("send_chat_message", { request: { messages }, onEvent: onEventChannel });
   },
 
   async openSettingsWindow(): Promise<void> {

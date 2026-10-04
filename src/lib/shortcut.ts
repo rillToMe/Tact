@@ -122,3 +122,90 @@ export function validateAccelerator(accelerator: string): string | null {
 
   return null;
 }
+
+/**
+ * Modifier-only key codes, which never complete a keypress on their own.
+ *
+ * Mirrors `RESERVED_MODE_CODES` in `src-tauri/src/ai/model.rs`.
+ */
+const MODIFIER_ONLY_CODES = new Set([
+  "AltLeft",
+  "AltRight",
+  "ControlLeft",
+  "ControlRight",
+  "ShiftLeft",
+  "ShiftRight",
+  "MetaLeft",
+  "MetaRight",
+  "CapsLock",
+  "NumLock",
+  "ScrollLock",
+  "ContextMenu",
+]);
+
+/**
+ * Keys that cannot become the AI mode toggle because the search window already
+ * uses them: Enter submits, Escape dismisses.
+ *
+ * This mirrors the Rust-side rule, which is the authority: the backend
+ * re-validates and repairs on load, so this copy only exists to give immediate
+ * feedback while recording. If the two ever disagree, Rust wins.
+ */
+const RESERVED_MODE_CODES = new Set(["Enter", "NumpadEnter", "Escape"]);
+
+/** Modifier tokens accepted in a stored accelerator, in display order. */
+const MODIFIER_TOKENS = new Set(["ctrl", "control", "alt", "shift", "super", "command", "cmd"]);
+
+/**
+ * True when the recorded accelerator can serve as the AI mode toggle.
+ *
+ * A modifier is optional here, unlike a global shortcut: `Tab` is the default.
+ * A modifier is still *allowed*, which is what makes a letter usable as the
+ * toggle - binding a bare `K` would make the search bar impossible to type in.
+ */
+export function isValidModeKey(accelerator: string): boolean {
+  const parts = accelerator.split("+").map((part) => part.trim());
+  const code = parts[parts.length - 1];
+
+  if (!code || MODIFIER_ONLY_CODES.has(code)) return false;
+  if (RESERVED_MODE_CODES.has(code)) return false;
+
+  // Every part before the key must be a known modifier.
+  return parts.slice(0, -1).every((part) => MODIFIER_TOKENS.has(part.toLowerCase()));
+}
+
+/**
+ * True when a keydown event matches a stored mode key.
+ *
+ * Both sides are compared as sets: every modifier in the stored accelerator must
+ * be held, and no extra modifier may be held. That means a bare `Tab` does not
+ * fire while Ctrl is down, so `Ctrl+Tab` stays available to the webview instead
+ * of being swallowed by the mode toggle.
+ */
+export function modeKeyMatches(accelerator: string, event: KeyboardEvent): boolean {
+  const parts = accelerator.split("+").map((part) => part.trim());
+  const code = parts[parts.length - 1];
+  if (!code || code !== event.code) return false;
+
+  const stored = new Set(parts.slice(0, -1).map((part) => part.toLowerCase()));
+  const wantsCtrl = stored.has("ctrl") || stored.has("control");
+  const wantsSuper = stored.has("super") || stored.has("command") || stored.has("cmd");
+
+  return (
+    wantsCtrl === event.ctrlKey &&
+    stored.has("alt") === event.altKey &&
+    stored.has("shift") === event.shiftKey &&
+    wantsSuper === event.metaKey
+  );
+}
+
+/**
+ * Turns a stored mode key into readable key caps.
+ *
+ * The mode key is stored as an accelerator (`Tab`, `ctrl+KeyK`) so it goes
+ * through the same formatter as the global shortcut, which is what keeps the
+ * settings row and the search bar's hint chip saying the same thing.
+ */
+export function formatModeKey(accelerator: string): string {
+  return formatAccelerator(accelerator);
+}

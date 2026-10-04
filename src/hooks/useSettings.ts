@@ -6,6 +6,12 @@ import type { Settings, SettingsPayload, ShortcutStatus } from "../types";
 interface UseSettingsResult {
   settings: Settings | null;
   shortcut: ShortcutStatus | null;
+  /**
+   * Whether an AI API key is stored.
+   *
+   * Reported as a boolean because the key itself never leaves the OS store.
+   */
+  apiKeySet: boolean;
   loading: boolean;
   error: string | null;
   update: (settings: Settings) => Promise<SettingsPayload>;
@@ -20,6 +26,7 @@ interface UseSettingsResult {
 export function useSettings(): UseSettingsResult {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [shortcut, setShortcut] = useState<ShortcutStatus | null>(null);
+  const [apiKeySet, setApiKeySet] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +39,7 @@ export function useSettings(): UseSettingsResult {
         if (cancelled) return;
         setSettings(payload.settings);
         setShortcut(payload.shortcut);
+        setApiKeySet(payload.apiKeySet);
         applyTheme(payload.settings.theme);
       })
       .catch((cause) => {
@@ -62,11 +70,12 @@ export function useSettings(): UseSettingsResult {
     const payload = await ipc.updateSettings(next);
     setSettings(payload.settings);
     setShortcut(payload.shortcut);
+    setApiKeySet(payload.apiKeySet);
     applyTheme(payload.settings.theme);
     return payload;
   }, []);
 
-  return { settings, shortcut, loading, error, update };
+  return { settings, shortcut, apiKeySet, loading, error, update };
 }
 
 /**

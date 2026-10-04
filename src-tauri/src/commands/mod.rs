@@ -1,6 +1,8 @@
 use serde::Serialize;
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::ai::{self, ChatEvent, ChatRequest};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::search::engine::{self, SearchEngine};
 use crate::settings::{Settings, SettingsState, store};
@@ -13,12 +15,16 @@ use crate::window::{EVENT_SETTINGS_CHANGED, hide_search, hide_settings, show_set
 pub struct SettingsPayload {
     pub settings: Settings,
     pub shortcut: ShortcutStatus,
+    /// Whether an API key is stored, so the UI can say "saved" without ever
+    /// receiving the key itself.
+    pub api_key_set: bool,
 }
 
 fn payload(state: &SettingsState, shortcut: &ShortcutState) -> SettingsPayload {
     SettingsPayload {
         settings: state.snapshot(),
         shortcut: shortcut.status(),
+        api_key_set: ai::secret::is_set(),
     }
 }
 
@@ -122,6 +128,16 @@ pub fn hide_search_window(app: AppHandle) -> AppResult<()> {
     hide_search(&app)
 }
 
+/// Grows or shrinks the search window for AI mode.
+///
+/// Driven by the frontend because only it knows when the conversation is
+/// actually on screen, and resizing an empty window would show a large blank
+/// panel.
+#[tauri::command]
+pub fn set_search_expanded(app: AppHandle, expanded: bool) -> AppResult<()> {
+    crate::window::set_search_expanded(&app, expanded)
+}
+
 #[tauri::command]
 pub fn open_settings_window(app: AppHandle) -> AppResult<()> {
     show_settings(&app)
@@ -135,4 +151,32 @@ pub fn hide_settings_window(app: AppHandle) -> AppResult<()> {
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
     app.exit(0);
+}
+
+/// Stores the AI API key in the Windows Credential Manager.
+///
+/// The key is written to the OS store and never persisted anywhere else, so it
+/// is absent from `settings.json` and from every payload sent to the frontend.
+#[tauri::command]
+pub fn set_ai_api_key(api_key: String) -> AppResult<()> {
+    ai::secret::store(&api_key)
+}
+
+#[tauri::command]
+pub fn clear_ai_api_key() -> AppResult<()> {
+    ai::secret::clear()
+}
+
+/// Streams a chat completion, sending each token through `on_event`.
+///
+/// The reply is streamed rather than awaited whole so a slow model shows
+/// progress immediately instead of leaving the window blank for many seconds.
+#[tauri::command]
+pub async fn send_chat_message(
+    state: State<'_, SettingsState>,
+    request: ChatRequest,
+    on_event: Channel<ChatEvent>,
+) -> AppResult<()> {
+    let settings = state.snapshot().ai;
+    ai::stream_chat(&settings, request, on_event).await
 }
