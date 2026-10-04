@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: var(--font-ui);
+
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-hover: var(--surface-hover);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text-primary);
+  --color-fg-muted: var(--text-secondary);
+  --color-fg-subtle: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --radius-surface: 10px;
+  --radius-control: 7px;
+  --radius-chip: 5px;
+
+  --shadow-surface: var(--shadow-surface);
+  --shadow-popup: var(--shadow-popup);
+}
+
+/*
+ * Semantic tokens.
+ *
+ * Two deliberate choices here:
+ *
+ * 1. Borders are alpha, not solid greys. A translucent white edge sits
+ *    correctly on any surface behind it, which is what keeps a floating dark
+ *    panel from looking like a flat grey box.
+ * 2. The palette is neutral charcoal with no blue or purple tint. Colour is
+ *    reserved for state (focus, error), never for the surface itself.
+ */
+:root {
+  color-scheme: light;
+
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui,
+    -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #f4f4f5;
+  --surface-hover: rgb(0 0 0 / 0.045);
+  --surface-popup: #ffffff;
+  --scrim: rgb(0 0 0 / 0.28);
+  --border: rgb(0 0 0 / 0.1);
+  --border-strong: rgb(0 0 0 / 0.16);
+  --text-primary: #1b1b1f;
+  --text-secondary: #54545c;
+  --text-muted: #8b8b94;
+  --accent: #3b6fd4;
+  --accent-soft: rgb(59 111 212 / 0.14);
+  --danger: #c8342f;
+  --danger-soft: rgb(200 52 47 / 0.12);
+  --shadow-surface: 0 0 0 1px rgb(0 0 0 / 0.03), 0 1px 2px rgb(0 0 0 / 0.07),
+    0 14px 32px -8px rgb(0 0 0 / 0.2);
+  --shadow-popup: 0 0 0 1px rgb(0 0 0 / 0.04), 0 2px 6px rgb(0 0 0 / 0.1),
+    0 12px 28px -6px rgb(0 0 0 / 0.18);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --surface: #27272a;
+  --surface-elevated: #2f2f33;
+  --surface-sunken: #232326;
+  --surface-hover: rgb(255 255 255 / 0.06);
+  --surface-popup: #303034;
+  --scrim: rgb(0 0 0 / 0.5);
+  --border: rgb(255 255 255 / 0.09);
+  --border-strong: rgb(255 255 255 / 0.16);
+  --text-primary: #f4f4f6;
+  --text-secondary: #b0b0b8;
+  --text-muted: #84848d;
+  --accent: #5c8fdb;
+  --accent-soft: rgb(92 143 219 / 0.18);
+  --danger: #e8635c;
+  --danger-soft: rgb(232 99 92 / 0.16);
+  --shadow-surface: 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4),
+    0 18px 40px -10px rgb(0 0 0 / 0.6);
+  --shadow-popup: 0 0 0 1px rgb(0 0 0 / 0.5), 0 4px 12px rgb(0 0 0 / 0.45),
+    0 16px 36px -8px rgb(0 0 0 / 0.55);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  /* The window is exactly as tall as its content; at fractional display
+     scaling a 1px rounding overflow would otherwise produce scrollbars. */
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input,
+button,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+@layer components {
+  /* The floating panel that fills a window. */
+  .surface {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-surface);
+    box-shadow: var(--shadow-surface);
+  }
+
+  /* Consistent keyboard focus for real controls (not for the search surface,
+     where the window appearing is itself the focus signal). */
+  .focus-ring {
+    outline: none;
+  }
+
+  .focus-ring:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
