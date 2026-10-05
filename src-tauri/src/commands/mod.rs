@@ -81,6 +81,12 @@ pub fn list_search_engines() -> &'static [SearchEngine] {
     engine::all()
 }
 
+/// The `!bang` shortcuts, for the settings page and the search bar's hint.
+#[tauri::command]
+pub fn list_bangs() -> &'static [engine::Bang] {
+    engine::all_bangs()
+}
+
 #[tauri::command]
 pub fn get_shortcut_status(shortcut: State<'_, ShortcutState>) -> ShortcutStatus {
     shortcut.status()
@@ -106,6 +112,8 @@ pub fn capture_shortcut(
 ///
 /// The window is hidden only after the URL opens successfully so a failure
 /// leaves the query on screen for a retry.
+///
+/// A leading `!bang` overrides the configured engine for this one query.
 #[tauri::command]
 pub fn submit_search(
     app: AppHandle,
@@ -113,10 +121,25 @@ pub fn submit_search(
     query: String,
 ) -> AppResult<String> {
     let settings = state.snapshot();
-    let engine = engine::resolve(&settings.search_engine);
-    let url = engine::build_search_url(engine, &query)?;
+    let parsed = engine::parse_query(&query);
 
-    log::info!("submit_search: engine={} url={url}", engine.id);
+    let url = match parsed.bang {
+        Some(bang) => {
+            log::info!(
+                "submit_search: bang=!{} query={:?}",
+                bang.keyword,
+                parsed.query
+            );
+            engine::build_bang_url(bang, parsed.query)?
+        }
+        None => {
+            let engine = engine::resolve(&settings.search_engine);
+            log::info!("submit_search: engine={} url query", engine.id);
+            engine::build_search_url(engine, parsed.query)?
+        }
+    };
+
+    log::info!("submit_search: url={url}");
 
     open_external(&app, &url)?;
     hide_search(&app)?;

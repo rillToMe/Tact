@@ -1,24 +1,24 @@
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136234,"model":"space-bunny-free","choices":[{"index":0,"delta":{"role":"assistant"}}],"usage":null}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant"}}],"usage":null}
 
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136234,"model":"space-bunny-free","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"User"}}],"usage":null}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"User"}}],"usage":null}
 
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136234,"model":"space-bunny-free","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":" wants exactly \""}}],"usage":null}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":" wants exactly \""}}],"usage":null}
 
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136234,"model":"space-bunny-free","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"hello world\". Just"}}],"usage":null}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"hello world\". Just"}}],"usage":null}
 
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136234,"model":"space-bunny-free","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":" reply that"}}],"usage":null}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":" reply that"}}],"usage":null}
 
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136234,"model":"space-bunny-free","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"."}}],"usage":null}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"."}}],"usage":null}
 
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136234,"model":"space-bunny-free","choices":[{"index":0,"delta":{"role":"assistant","content":"hello world"}}],"usage":null}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"hello world"}}],"usage":null}
 
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136234,"model":"space-bunny-free","choices":[{"index":0,"finish_reason":"stop","delta":{"role":"assistant"}}],"usage":{"prompt_tokens":3069,"completion_tokens":15,"total_tokens":3084,"estimated":true}}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[{"index":0,"finish_reason":"stop","delta":{"role":"assistant"}}],"usage":{"prompt_tokens":3069,"completion_tokens":15,"total_tokens":3084,"estimated":true}}
 
-data: {"id":"0711c4e919bce6f841efcc3a5f3f2110","object":"chat.completion.chunk","created":1791136233,"model":"space-bunny-free","choices":[],"usage":{"prompt_tokens":928,"completion_tokens":16,"total_tokens":944,"prompt_tokens_details":{"cached_tokens":140},"completion_tokens_details":{"reasoning_tokens":11}}}
+data: {"id":"stream-1","object":"chat.completion.chunk","created":1700000000,"model":"test-model","choices":[],"usage":{"prompt_tokens":928,"completion_tokens":16,"total_tokens":944,"prompt_tokens_details":{"cached_tokens":140},"completion_tokens_details":{"reasoning_tokens":11}}}
 
 data: [DONE]
 
-data: {"choices":[],"cost":"0","object":"chat.completion.chunk","created":1791136233}
+data: {"choices":[],"cost":"0","object":"chat.completion.chunk","created":1700000000}
 
 data: [DONE]
 

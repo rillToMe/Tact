@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ipc, toAppError } from "../../lib/ipc";
 import { useSearchOpened } from "../../hooks/useSettings";
 import { useAiChat } from "../../hooks/useAiChat";
 import { ENGINE_ICONS_BASE, useSearchChrome } from "../../hooks/useSearchChrome";
 import { formatAccelerator, modeKeyMatches } from "../../lib/shortcut";
+import { parseQuery } from "../../lib/search";
 import { SearchIcon, SlidersIcon, SparkleIcon } from "../../components/icons";
 import { IconButton, Kbd } from "../../components/ui";
 import { cn } from "../../lib/cn";
@@ -16,10 +17,35 @@ export function SearchWindow() {
   const [aiMode, setAiMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { engine, ai } = useSearchChrome();
+  const { engine, bangs, ai } = useSearchChrome();
   const chat = useAiChat();
 
   const aiAvailable = ai?.enabled ?? false;
+
+  // Parsed on every keystroke so the bar can preview where the query will go.
+  // The URL itself is built in Rust, which re-parses - this only drives the
+  // icon and the hint, so the two can never disagree about the destination.
+  const parsed = useMemo(() => parseQuery(query, bangs), [query, bangs]);
+
+  /**
+   * Bangs to suggest, or `null` when nothing should be suggested.
+   *
+   * Only while the query is a bare `!` followed by an incomplete keyword: once
+   * it matches, the icon already shows the destination and a list would be
+   * redundant. Once a space is typed the user has moved on to the query text.
+   */
+  const bangHint = useMemo(() => {
+    const trimmed = query.trim();
+    if (!trimmed.startsWith("!") || parsed.bang) return null;
+
+    const keyword = trimmed.slice(1).toLowerCase();
+    // A space means the keyword is finished, so there is nothing left to
+    // complete - and an unknown keyword stays in the query rather than hinting.
+    if (keyword.includes(" ") || keyword.length === 0) return null;
+
+    const matches = bangs.filter((bang) => bang.keyword.startsWith(keyword));
+    return matches.length > 0 ? matches : null;
+  }, [query, bangs, parsed.bang]);
 
   const focusInput = useCallback(() => {
     const input = inputRef.current;
@@ -169,6 +195,18 @@ export function SearchWindow() {
       >
         {showConversation ? (
           <SparkleIcon size={17} className="shrink-0 text-accent" />
+        ) : parsed.bang ? (
+          // A recognised bang takes over the icon, which is how the user sees
+          // that the query is about to go somewhere other than their engine.
+          <span className="flex h-[18px] w-[38px] shrink-0 items-center">
+            <img
+              src={`${ENGINE_ICONS_BASE}/${parsed.bang.icon}`}
+              alt={parsed.bang.name}
+              title={`Searching ${parsed.bang.name}`}
+              draggable={false}
+              className="max-h-[18px] w-auto max-w-full object-contain object-left"
+            />
+          </span>
         ) : engine ? (
           // A fixed-width box keeps the input from shifting when the engine
           // changes between a square glyph and a wide wordmark.
@@ -206,10 +244,49 @@ export function SearchWindow() {
           className="h-full min-w-0 flex-1 bg-transparent text-[16px] leading-none tracking-[-0.012em] text-fg caret-accent placeholder:text-fg-subtle focus:outline-none"
         />
 
+        {/* The bang hint, shown while the query is a bare `!something`.
+            Disappears the moment a bang matches, because then the icon and the
+            title already say where the query is going - two indicators for one
+            fact would just be noise. */}
+        {!showConversation && !errorMessage && bangHint && (
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {bangHint.slice(0, 5).map((bang) => (
+                <button
+                  key={bang.keyword}
+                  type="button"
+                  tabIndex={-1}
+                  // Clicking completes the bang rather than searching it, so the
+                  // user can type `!y`, click YouTube, and keep typing.
+                  onClick={() => {
+                    setQuery(`!${bang.keyword} `);
+                    focusInput();
+                  }}
+                  title={`Search ${bang.name}`}
+                  className={cn(
+                    "focus-ring flex items-center gap-1 rounded-chip py-0.5 pl-1 pr-1.5",
+                    "text-[11px] text-fg-subtle transition-colors duration-150",
+                    "hover:bg-surface-hover hover:text-fg-muted",
+                  )}
+                >
+                  <img
+                    src={`${ENGINE_ICONS_BASE}/${bang.icon}`}
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    className="size-3.5 object-contain"
+                  />
+                  {bang.keyword}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* The mode chip. Hidden once a conversation is on screen, where the
             sparkle icon and placeholder already say which mode is active, and
             the trailing slot is better used by the settings button. */}
-        {aiAvailable && !showConversation && !errorMessage && (
+        {aiAvailable && !showConversation && !errorMessage && !bangHint && (
           <button
             type="button"
             tabIndex={-1}

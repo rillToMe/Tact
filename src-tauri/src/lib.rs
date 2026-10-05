@@ -82,6 +82,7 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::list_search_engines,
+            commands::list_bangs,
             commands::get_shortcut_status,
             commands::capture_shortcut,
             commands::submit_search,

@@ -31,6 +31,20 @@ export interface SearchEngine {
   icon: string;
 }
 
+/**
+ * A `!bang` shortcut that sends the query straight to one site.
+ *
+ * Separate from `SearchEngine`: an engine is the default chosen in Settings,
+ * while a bang is typed per query and is never a default.
+ */
+export interface Bang {
+  /** What is typed after `!`, without the `!`. */
+  keyword: string;
+  name: string;
+  searchUrl: string;
+  icon: string;
+}
+
 export type ErrorCode =
   | "shortcutInvalid"
   | "shortcutInUse"

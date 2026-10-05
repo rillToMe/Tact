@@ -2,6 +2,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   AppError,
+  Bang,
   ChatEvent,
   ChatMessage,
   SearchEngine,
@@ -37,6 +38,11 @@ export const ipc = {
 
   async listSearchEngines(): Promise<SearchEngine[]> {
     return invoke("list_search_engines");
+  },
+
+  /** The `!bang` shortcuts, for the settings page and the search bar's hint. */
+  async listBangs(): Promise<Bang[]> {
+    return invoke("list_bangs");
   },
 
   async getShortcutStatus(): Promise<ShortcutStatus> {

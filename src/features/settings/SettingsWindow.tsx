@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSettings } from "../../hooks/useSettings";
 import { ipc, toAppError } from "../../lib/ipc";
 import { applyTheme } from "../../lib/theme";
-import type { AiSettings, SearchEngine, Settings, Theme } from "../../types";
+import { cn } from "../../lib/cn";
+import type { AiSettings, Bang, SearchEngine, Settings, Theme } from "../../types";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "../../components/icons";
 import {
   InlineError,
@@ -29,11 +30,15 @@ type Page = "general" | "ai";
 export function SettingsWindow() {
   const { settings, shortcut, apiKeySet, loading, error, update } = useSettings();
   const [engines, setEngines] = useState<SearchEngine[]>([]);
+  const [bangs, setBangs] = useState<Bang[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [page, setPage] = useState<Page>("general");
 
   useEffect(() => {
     ipc.listSearchEngines().then(setEngines).catch(() => setEngines([]));
+    // The bang list is reference material; if it fails to load the row simply
+    // shows nothing rather than blocking the page.
+    ipc.listBangs().then(setBangs).catch(() => setBangs([]));
   }, []);
 
   // Escape closes settings, matching the search window. The recorder captures
@@ -139,24 +144,56 @@ export function SettingsWindow() {
               </SettingsGroup>
 
               <SettingsGroup title="Search">
-                <SettingsRow
-                  label="Search engine"
-                  htmlFor="search-engine"
-                  control={
-                    <Select<string>
-                      id="search-engine"
-                      label="Search engine"
-                      value={settings.searchEngine}
-                      options={engines.map((engine) => ({
-                        value: engine.id,
-                        label: engine.name,
-                        iconSrc: `${ICONS_BASE}/${engine.icon}`,
-                      }))}
-                      onChange={(searchEngine) => patch({ searchEngine })}
-                    />
-                  }
-                />
-              </SettingsGroup>
+                  <SettingsRow
+                    label="Search engine"
+                    htmlFor="search-engine"
+                    control={
+                      <Select<string>
+                        id="search-engine"
+                        label="Search engine"
+                        value={settings.searchEngine}
+                        options={engines.map((engine) => ({
+                          value: engine.id,
+                          label: engine.name,
+                          iconSrc: `${ICONS_BASE}/${engine.icon}`,
+                        }))}
+                        onChange={(searchEngine) => patch({ searchEngine })}
+                      />
+                    }
+                  />
+                </SettingsGroup>
+
+                {/* The bang list is reference material, not a setting: it is
+                    read-only and exists so the shortcuts are discoverable at
+                    all. Anything that has to be remembered is not a feature. */}
+                <SettingsGroup title="Shortcuts">
+                  <SettingsRow
+                    label="Search a site directly"
+                    description="Type a bang before your query."
+                    control={<span className="text-[11.5px] text-fg-subtle">e.g. !yt</span>}
+                  />
+                  <div className="flex flex-wrap gap-1.5 px-1 py-2.5">
+                    {bangs.map((bang) => (
+                      <span
+                        key={bang.keyword}
+                        title={bang.name}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-chip border border-line",
+                          "bg-surface-elevated py-1 pl-1.5 pr-2 text-[11.5px] text-fg-muted",
+                        )}
+                      >
+                        <img
+                          src={`${ICONS_BASE}/${bang.icon}`}
+                          alt=""
+                          aria-hidden="true"
+                          draggable={false}
+                          className="size-3.5 object-contain"
+                        />
+                        !{bang.keyword}
+                      </span>
+                    ))}
+                  </div>
+                </SettingsGroup>
 
               <SettingsGroup title="Appearance">
                 <SettingsRow

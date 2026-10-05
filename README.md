@@ -26,6 +26,13 @@ bun run tauri dev
 The search window starts hidden in every build. To open it while developing,
 press `Alt + T`, or use the tray icon's **Search** item.
 
+The dev server runs on **58080**, not Vite's default 5173 — that default is what
+every other Vite project uses, so a second one would either fail to start or,
+worse, leave Tauri pointing at another app's page. `strictPort` is on, so a
+conflict fails loudly instead of silently moving to a different port that Tauri
+is not watching. `bun run preview` serves the production build on **61234**, so
+the two can run side by side.
+
 ## Build
 
 ```sh
@@ -51,6 +58,7 @@ cargo fmt    --manifest-path src-tauri/Cargo.toml -- --check
 | --- | --- |
 | `Alt + T` (default) | Show the search window; press again while it is focused to dismiss |
 | Type + `Enter` | Open the query in your default browser and hide the window |
+| `!bang` + `Enter` | Send this one query to a specific site (see below) |
 | `Tab` (default, AI on) | Switch the search bar into AI mode |
 | `Esc` | Hide the window (the app keeps running) |
 | `Ctrl + ,` | Open Settings |
@@ -58,6 +66,36 @@ cargo fmt    --manifest-path src-tauri/Cargo.toml -- --check
 
 Settings are saved automatically. Quitting is explicit: closing a window hides
 it, so the shortcut keeps working in the background.
+
+### Bangs
+
+Type a bang before your query to send it straight to one site:
+
+```
+!yt rust ownership     →  YouTube search
+!gh tauri              →  GitHub search
+!w borrow checker      →  Wikipedia search
+!so lifetime elision   →  Stack Overflow search
+!npm react             →  npm search
+```
+
+A bang is only recognised as the **first** token, which is what makes one-letter
+keywords safe — `how to yt a video` is an ordinary search. An unrecognised bang
+is left in the query rather than stripped, because silently dropping text you
+typed would change what you asked for.
+
+A bare bang with no argument opens the site itself: `!gh` goes to github.com.
+The destination is an explicit `home_url` per bang rather than derived from the
+search URL, because stripping the query string would give
+`https://github.com/search` — an empty search page, not the site.
+
+While you are typing a bang, the bar suggests the ones that match, and the icon
+switches to the destination site as soon as the bang is recognised. The list is
+also shown in Settings under **Shortcuts**.
+
+Bangs are reference data, not settings: adding one is a single entry in `BANGS`
+in `src-tauri/src/search/engine.rs`, plus its icon in
+`public/icons-search-engine/`.
 
 ### Settings
 

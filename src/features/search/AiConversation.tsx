@@ -152,6 +152,14 @@ interface UserMessageProps {
 }
 
 /**
+ * How tall the edit box may grow before it scrolls instead.
+ *
+ * Roughly ten lines: enough for a long question to stay readable, short enough
+ * that the conversation around it is not pushed off screen.
+ */
+const MAX_EDITOR_HEIGHT = 200;
+
+/**
  * What the user typed, as a bubble.
  *
  * The bubble is what separates the user's own words from the answer: it is a
@@ -181,11 +189,29 @@ function UserMessage({
     setDraft(content);
   }
 
+  /**
+   * Grows the box to fit its content, up to a cap.
+   *
+   * The border has to be added back on. `box-sizing: border-box` makes `height`
+   * include the border, but `scrollHeight` measures content plus padding and
+   * excludes it - so setting `height = scrollHeight` leaves the box 2px short,
+   * and that overflow is enough to show a scrollbar on a single line of text.
+   */
   const autoGrow = useCallback(() => {
     const node = inputRef.current;
     if (!node) return;
+
+    const styles = getComputedStyle(node);
+    const border =
+      parseFloat(styles.borderTopWidth) + parseFloat(styles.borderBottomWidth);
+
     node.style.height = "auto";
-    node.style.height = `${Math.min(node.scrollHeight, 200)}px`;
+    const wanted = node.scrollHeight + border;
+    node.style.height = `${Math.min(wanted, MAX_EDITOR_HEIGHT)}px`;
+
+    // Only allow a scrollbar once the cap is actually reached; below that the
+    // box is sized exactly and a bar would be a 2px lie.
+    node.style.overflowY = wanted > MAX_EDITOR_HEIGHT ? "auto" : "hidden";
   }, []);
 
   useEffect(() => {
@@ -223,9 +249,14 @@ function UserMessage({
             }}
             aria-label="Edit message"
             className={cn(
-              "w-full resize-none rounded-control border border-line-strong bg-surface-elevated",
-              "px-2.5 py-1.5 text-[12.5px] leading-5 text-fg",
-              "focus:border-accent focus:outline-none",
+              // The box is focused the moment it opens, so a `focus:` accent
+              // border would be a permanent bright ring rather than a focus cue
+              // - it would read as decoration, not state. A quiet border and a
+              // caret are enough: the user knows where they are because they
+              // just opened it.
+              "w-full resize-none rounded-control bg-surface-sunken",
+              "border border-line px-2.5 py-1.5 text-[12.5px] leading-5 text-fg",
+              "outline-none",
             )}
             rows={1}
           />
@@ -244,8 +275,8 @@ function UserMessage({
               className={cn(
                 "focus-ring rounded-chip px-2 py-0.5 text-[11.5px] font-medium transition-colors duration-150",
                 !draft.trim() || disabled
-                  ? "cursor-not-allowed text-fg-subtle"
-                  : "bg-accent-soft text-accent hover:bg-accent hover:text-white",
+                  ? "cursor-not-allowed text-fg-subtle opacity-50"
+                  : "bg-accent text-white hover:bg-accent/90",
               )}
             >
               Send

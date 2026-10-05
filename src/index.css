@@ -84,6 +84,11 @@
   --danger: #c8342f;
   --danger-soft: rgb(200 52 47 / 0.12);
 
+  /* Scrollbar thumb. Alpha rather than a solid grey so it sits on any surface
+     behind it, the same reasoning as the borders. */
+  --scrollbar-thumb: rgb(0 0 0 / 0.22);
+  --scrollbar-thumb-hover: rgb(0 0 0 / 0.34);
+
   /* Headings lean blue so an answer's structure is visible at a glance;
      `strong` is a warmer ink that reads as emphasis without competing with the
      accent used for links and headings. */
@@ -134,6 +139,9 @@
   --danger: #e8635c;
   --danger-soft: rgb(232 99 92 / 0.16);
 
+  --scrollbar-thumb: rgb(255 255 255 / 0.2);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 0.32);
+
   /* Lifted rather than darkened: on a dark surface, structure has to come from
      luminance, and a darker heading would disappear into the panel. */
   --heading: #a8c7f5;
@@ -165,6 +173,66 @@
 
 * {
   box-sizing: border-box;
+}
+
+/*
+ * Scrollbars.
+ *
+ * The default Windows scrollbar is a grey trough with two arrow buttons, drawn
+ * at full size regardless of how short the container is. Inside a 400px chat
+ * panel that reads as browser chrome leaking into the app, and the arrows are
+ * useless on a track that short.
+ *
+ * Two mechanisms are needed, and they are mutually exclusive rather than
+ * layered. Per the spec, a computed `scrollbar-color` or `scrollbar-width` of
+ * anything other than `auto` makes the browser *ignore* every
+ * `::-webkit-scrollbar-*` rule - so declaring both would silently discard the
+ * `::-webkit-scrollbar-button` rule that removes the arrows, leaving exactly the
+ * thing being fixed.
+ *
+ * So the standard properties are gated behind `@supports`, and the WebKit
+ * pseudo-elements are the fallback for engines without them. WebView2 supports
+ * the standard properties today, so the first branch is the one that runs.
+ *
+ * The thumb is inset with a transparent border and `background-clip: padding-box`,
+ * which is what makes a 10px hit area look like a 6px pill - the pointer target
+ * stays comfortable without the bar looking heavy.
+ */
+@supports (scrollbar-color: auto) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+}
+
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-track-piece {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  /* The arrow buttons and the corner between two bars are removed rather than
+     restyled: there is no way to make them match a flat, borderless bar. */
+  ::-webkit-scrollbar-button,
+  ::-webkit-scrollbar-corner {
+    display: none;
+  }
 }
 
 html,

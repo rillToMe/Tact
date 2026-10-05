@@ -16,6 +16,76 @@ pub struct SearchEngine {
     pub icon: &'static str,
 }
 
+/// A `!bang` shortcut that sends the query straight to one site.
+///
+/// Separate from `SearchEngine` because the two are different things: an engine
+/// is the default that a plain query goes to and is chosen in Settings, while a
+/// bang is typed per query and is never a default. Merging them would mean a
+/// Settings dropdown listing `!yt`, which is not a choice anyone wants to make.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Bang {
+    /// What the user types after `!`, without the `!`. Lowercase, no spaces.
+    pub keyword: &'static str,
+    pub name: &'static str,
+    /// `{query}` is replaced with the percent-encoded query string.
+    ///
+    /// May be empty for a bang whose site has no search endpoint, in which case
+    /// the query is ignored and the home page opens.
+    pub search_url: &'static str,
+    /// Where a bare bang with no argument goes.
+    ///
+    /// Explicit rather than derived by stripping the query string off
+    /// `search_url`: that produces `https://github.com/search`, an empty search
+    /// page, when what a bare `!gh` should open is the site itself.
+    pub home_url: &'static str,
+    /// File name of the icon under `public/icons-search-engine/`.
+    pub icon: &'static str,
+}
+
+/// The bang registry.
+///
+/// A bang is matched only when it is the *first* token of the query, so a query
+/// that merely mentions "yt" later is left alone. Keywords are short because
+/// they are typed by hand every time.
+pub const BANGS: &[Bang] = &[
+    Bang {
+        keyword: "yt",
+        name: "YouTube",
+        search_url: "https://www.youtube.com/results?search_query={query}",
+        home_url: "https://www.youtube.com",
+        icon: "youtube.png",
+    },
+    Bang {
+        keyword: "gh",
+        name: "GitHub",
+        search_url: "https://github.com/search?q={query}",
+        home_url: "https://github.com",
+        icon: "github.png",
+    },
+    Bang {
+        keyword: "w",
+        name: "Wikipedia",
+        search_url: "https://en.wikipedia.org/w/index.php?search={query}",
+        home_url: "https://en.wikipedia.org",
+        icon: "wikipedia.png",
+    },
+    Bang {
+        keyword: "so",
+        name: "Stack Overflow",
+        search_url: "https://stackoverflow.com/search?q={query}",
+        home_url: "https://stackoverflow.com",
+        icon: "stackoverflow.png",
+    },
+    Bang {
+        keyword: "npm",
+        name: "npm",
+        search_url: "https://www.npmjs.com/search?q={query}",
+        home_url: "https://www.npmjs.com",
+        icon: "npm.png",
+    },
+];
+
 /// The engine registry.
 ///
 /// Adding an engine is a one-line change here: the frontend reads this list
@@ -58,6 +128,15 @@ pub fn all() -> &'static [SearchEngine] {
     ENGINES
 }
 
+pub fn all_bangs() -> &'static [Bang] {
+    BANGS
+}
+
+pub fn find_bang(keyword: &str) -> Option<&'static Bang> {
+    let keyword = keyword.to_ascii_lowercase();
+    BANGS.iter().find(|bang| bang.keyword == keyword)
+}
+
 pub fn find(id: &str) -> Option<&'static SearchEngine> {
     ENGINES.iter().find(|engine| engine.id == id)
 }
@@ -80,7 +159,72 @@ const QUERY_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'_')
     .remove(b'~');
 
+/// A query split into an optional bang and the text to search for.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParsedQuery<'a> {
+    /// The bang that was typed, if it matched a registered one.
+    pub bang: Option<&'static Bang>,
+    /// The remaining text, trimmed.
+    pub query: &'a str,
+}
+
+/// Splits a leading `!bang` off a query.
+///
+/// A bang is only recognised as the **first** token, which is what makes it safe
+/// to use such short keywords: `how to yt` is an ordinary search, and only
+/// `!yt how to` is a bang. Anything else would make it impossible to search for
+/// the word itself.
+///
+/// An unrecognised bang is *not* stripped. `!foo bar` is left whole and searched
+/// normally, because silently dropping text the user typed is worse than a
+/// search that returns nothing useful - and it tells them the bang does not
+/// exist.
+pub fn parse_query(raw: &str) -> ParsedQuery<'_> {
+    let trimmed = raw.trim();
+
+    let Some(rest) = trimmed.strip_prefix('!') else {
+        return ParsedQuery {
+            bang: None,
+            query: trimmed,
+        };
+    };
+
+    // The keyword ends at the first space; a bang with no argument ("!yt") is
+    // allowed and opens the site's home page.
+    let (keyword, remainder) = match rest.split_once(char::is_whitespace) {
+        Some((keyword, remainder)) => (keyword, remainder.trim()),
+        None => (rest, ""),
+    };
+
+    match find_bang(keyword) {
+        Some(bang) => ParsedQuery {
+            bang: Some(bang),
+            query: remainder,
+        },
+        // Unknown keyword: keep the original text so nothing is lost.
+        None => ParsedQuery {
+            bang: None,
+            query: trimmed,
+        },
+    }
+}
+
 pub fn build_search_url(engine: &SearchEngine, query: &str) -> AppResult<String> {
+    build_url(engine.id, engine.search_url, query)
+}
+
+/// Builds the URL for a bang.
+///
+/// A bang with no argument opens the site itself, which is what makes a bare
+/// `!gh` a shortcut rather than an error.
+pub fn build_bang_url(bang: &Bang, query: &str) -> AppResult<String> {
+    if query.trim().is_empty() {
+        return Ok(bang.home_url.to_string());
+    }
+    build_url(bang.keyword, bang.search_url, query)
+}
+
+fn build_url(label: &str, template: &str, query: &str) -> AppResult<String> {
     let query = query.trim();
     if query.is_empty() {
         return Err(AppError::new(
@@ -89,11 +233,8 @@ pub fn build_search_url(engine: &SearchEngine, query: &str) -> AppResult<String>
         ));
     }
 
-    if !engine.search_url.contains(QUERY_PLACEHOLDER) {
-        log::error!(
-            "search url for {} is missing the {{query}} placeholder",
-            engine.id
-        );
+    if !template.contains(QUERY_PLACEHOLDER) {
+        log::error!("search url for {label} is missing the {{query}} placeholder");
         return Err(AppError::new(
             ErrorCode::Internal,
             "The search engine is not configured correctly.",
@@ -101,7 +242,7 @@ pub fn build_search_url(engine: &SearchEngine, query: &str) -> AppResult<String>
     }
 
     let encoded = utf8_percent_encode(query, QUERY_ENCODE_SET).to_string();
-    Ok(engine.search_url.replace(QUERY_PLACEHOLDER, &encoded))
+    Ok(template.replace(QUERY_PLACEHOLDER, &encoded))
 }
 
 #[cfg(test)]
@@ -273,5 +414,206 @@ mod tests {
     #[test]
     fn the_default_engine_is_google() {
         assert_eq!(default_engine().id, "google");
+    }
+
+    #[test]
+    fn a_leading_bang_selects_its_site() {
+        let parsed = parse_query("!yt rust ownership");
+        assert_eq!(parsed.bang.map(|b| b.keyword), Some("yt"));
+        assert_eq!(parsed.query, "rust ownership");
+
+        let url = build_bang_url(parsed.bang.unwrap(), parsed.query).unwrap();
+        assert_eq!(
+            url,
+            "https://www.youtube.com/results?search_query=rust%20ownership"
+        );
+    }
+
+    #[test]
+    fn a_bang_is_only_matched_as_the_first_token() {
+        // The whole reason the keywords can be one letter: `w` in the middle of
+        // a sentence must stay an ordinary word.
+        for query in ["how to yt a video", "rust ownership w", "see !yt later"] {
+            let parsed = parse_query(query);
+            assert!(parsed.bang.is_none(), "{query:?} should not be a bang");
+            assert_eq!(parsed.query, query.trim());
+        }
+    }
+
+    #[test]
+    fn a_bang_may_have_no_argument() {
+        // A bare `!gh` is a shortcut to the site, not an error.
+        let parsed = parse_query("!gh");
+        assert_eq!(parsed.bang.map(|b| b.keyword), Some("gh"));
+        assert_eq!(parsed.query, "");
+
+        let url = build_bang_url(parsed.bang.unwrap(), parsed.query).unwrap();
+        assert_eq!(url, "https://github.com");
+    }
+
+    #[test]
+    fn a_bare_bang_opens_the_site_not_an_empty_search() {
+        // Stripping the query string off `search_url` would give
+        // `https://github.com/search` - an empty search page, which is not what
+        // someone typing `!gh` meant. Hence the explicit `home_url`.
+        for bang in all_bangs() {
+            let url = build_bang_url(bang, "   ").unwrap();
+            assert_eq!(
+                url, bang.home_url,
+                "!{} should open its home page",
+                bang.keyword
+            );
+            assert!(!url.contains("/search"), "{}: {url}", bang.keyword);
+            assert!(!url.contains("?"), "{}: {url}", bang.keyword);
+        }
+    }
+
+    #[test]
+    fn an_unknown_bang_is_left_in_the_query() {
+        // Dropping text the user typed would be worse than a bad search: it
+        // would silently change what they asked for. Leaving it whole also tells
+        // them the bang does not exist.
+        let parsed = parse_query("!nope some words");
+        assert!(parsed.bang.is_none());
+        assert_eq!(parsed.query, "!nope some words");
+    }
+
+    #[test]
+    fn bang_keywords_are_matched_case_insensitively() {
+        for query in ["!YT rust", "!Yt rust", "!yt rust"] {
+            let parsed = parse_query(query);
+            assert_eq!(
+                parsed.bang.map(|b| b.keyword),
+                Some("yt"),
+                "{query:?} should match"
+            );
+            assert_eq!(parsed.query, "rust");
+        }
+    }
+
+    #[test]
+    fn a_lone_exclamation_is_not_a_bang() {
+        // "!" alone, or "! " with nothing after, must not be swallowed.
+        for query in ["!", "! ", "!  "] {
+            let parsed = parse_query(query);
+            assert!(parsed.bang.is_none(), "{query:?} should not be a bang");
+        }
+    }
+
+    #[test]
+    fn whitespace_around_a_bang_is_trimmed() {
+        let parsed = parse_query("   !yt    rust ownership   ");
+        assert_eq!(parsed.bang.map(|b| b.keyword), Some("yt"));
+        assert_eq!(parsed.query, "rust ownership");
+    }
+
+    #[test]
+    fn a_bang_query_is_percent_encoded() {
+        // The same escaping as an engine query: a bang must not be a way to
+        // inject extra parameters.
+        let parsed = parse_query("!yt a&b=c?d#e");
+        let url = build_bang_url(parsed.bang.unwrap(), parsed.query).unwrap();
+        assert_eq!(
+            url,
+            "https://www.youtube.com/results?search_query=a%26b%3Dc%3Fd%23e"
+        );
+        assert_eq!(url.matches('?').count(), 1);
+        assert!(!url.contains('#'));
+    }
+
+    #[test]
+    fn every_bang_builds_a_url_for_a_query() {
+        for bang in all_bangs() {
+            let url = build_bang_url(bang, "test query").unwrap();
+            assert!(url.starts_with("https://"), "{}: {url}", bang.keyword);
+            assert!(!url.contains(QUERY_PLACEHOLDER), "{}", bang.keyword);
+        }
+    }
+
+    #[test]
+    fn every_bang_has_a_home_page() {
+        // A bare bang has no query to encode, so it falls back to `home_url`.
+        // That must be a usable absolute URL on its own.
+        for bang in all_bangs() {
+            let url = build_bang_url(bang, "   ").unwrap();
+            assert!(url.starts_with("https://"), "{}: {url}", bang.keyword);
+            assert!(!url.contains('?'), "{}: {url}", bang.keyword);
+            assert!(!url.ends_with('/'), "{}: {url}", bang.keyword);
+        }
+    }
+
+    #[test]
+    fn bang_keywords_are_unique_and_typed_friendly() {
+        let mut keywords: Vec<&str> = all_bangs().iter().map(|b| b.keyword).collect();
+        let unique = keywords.len();
+        keywords.sort_unstable();
+        keywords.dedup();
+        assert_eq!(keywords.len(), unique, "duplicate bang keyword");
+
+        for bang in all_bangs() {
+            assert!(!bang.keyword.is_empty());
+            assert_eq!(
+                bang.keyword,
+                bang.keyword.to_ascii_lowercase(),
+                "{} must be lowercase to match",
+                bang.keyword
+            );
+            assert!(
+                !bang.keyword.contains(char::is_whitespace),
+                "{} must not contain whitespace",
+                bang.keyword
+            );
+            // A `!` inside the keyword would make it untypeable, since the
+            // leading one is the marker.
+            assert!(!bang.keyword.contains('!'), "{}", bang.keyword);
+        }
+    }
+
+    #[test]
+    fn every_bang_icon_exists_on_disk() {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../public/icons-search-engine");
+
+        for bang in all_bangs() {
+            let path = dir.join(bang.icon);
+            assert!(
+                path.is_file(),
+                "icon {} for bang !{} is missing at {}",
+                bang.icon,
+                bang.keyword,
+                path.display()
+            );
+        }
+    }
+
+    #[test]
+    fn every_bang_icon_is_a_sane_size() {
+        const MAX_DIMENSION: u32 = 512;
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../public/icons-search-engine");
+
+        for bang in all_bangs() {
+            let path = dir.join(bang.icon);
+            let (width, height) = png_dimensions(&path)
+                .unwrap_or_else(|e| panic!("cannot read dimensions of {}: {e}", path.display()));
+            assert!(
+                width <= MAX_DIMENSION && height <= MAX_DIMENSION,
+                "icon {} is {width}x{height}; normalise it to at most {MAX_DIMENSION}px",
+                bang.icon
+            );
+        }
+    }
+
+    #[test]
+    fn a_bang_keyword_does_not_shadow_an_engine_id() {
+        // Not a hard requirement, but a bang named `google` would be confusing
+        // next to the Google engine.
+        for bang in all_bangs() {
+            assert!(
+                find(bang.keyword).is_none(),
+                "bang !{} collides with an engine id",
+                bang.keyword
+            );
+        }
     }
 }
