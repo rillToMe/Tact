@@ -9,6 +9,7 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
-    "core:window:allow-set-focus"
+    "core:window:allow-set-focus",
+    "clipboard-manager:allow-write-text"
   ]
 }

@@ -49,3 +49,4 @@ futures-util = "0.3"
 # The default `v1` feature selects the platform store automatically, which on
 # Windows is `windows-native-keyring-store`.
 keyring = "4.2.0"
+tauri-plugin-clipboard-manager = "2"

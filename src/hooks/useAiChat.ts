@@ -19,6 +19,10 @@ export interface AiChatState {
   busy: boolean;
   error: string | null;
   ask: (prompt: string) => Promise<void>;
+  /** Re-sends a user message, dropping it and everything after it first. */
+  editAndResend: (index: number, nextContent: string) => Promise<void>;
+  /** Asks the same question again, dropping the reply it produced. */
+  retry: (assistantIndex: number) => Promise<void>;
   reset: () => void;
   /** Clears only the error, keeping the conversation. */
   dismissError: () => void;
@@ -76,23 +80,23 @@ export function useAiChat(): AiChatState {
   // component.
   useEffect(() => cancelFrame, [cancelFrame]);
 
-  const ask = useCallback(
-    async (prompt: string) => {
-      const trimmed = prompt.trim();
-      if (!trimmed || inFlight.current) return;
+  /**
+   * Runs one turn: sends `history`, streams the reply, and commits it.
+   *
+   * Shared by the initial ask, edit-and-resend, and retry, which differ only in
+   * what `history` contains. Keeping one implementation is what stops the three
+   * paths from drifting - each of them has to handle the frame coalescing, the
+   * reasoning bookkeeping, and the error rollback identically.
+   */
+  const run = useCallback(
+    async (history: ChatMessage[], rollbackTo: ChatMessage[]) => {
+      if (inFlight.current) return;
 
       inFlight.current = true;
       setBusy(true);
       setError(null);
       setStreaming("");
       setReasoning("");
-
-      // The prompt is added to the conversation before the request so the user
-      // sees their own message immediately, even if the provider is slow.
-      const history: ChatMessage[] = [
-        ...messages,
-        { role: "user", content: trimmed },
-      ];
       setMessages(history);
 
       // Accumulated locally because the state above is only for rendering:
@@ -135,10 +139,10 @@ export function useAiChat(): AiChatState {
         cancelFrame();
         setError(toAppError(cause).message);
 
-        // Drop the unanswered prompt so a retry does not send it twice. Without
+        // Roll back so a retry does not send the same prompt twice. Without
         // this, pressing Enter again would append a second copy and the provider
         // would see the same question back to back.
-        setMessages(messages);
+        setMessages(rollbackTo);
         setStreaming("");
         setReasoning("");
       } finally {
@@ -146,7 +150,68 @@ export function useAiChat(): AiChatState {
         setBusy(false);
       }
     },
-    [messages, scheduleFlush, cancelFrame],
+    [scheduleFlush, cancelFrame],
+  );
+
+  const ask = useCallback(
+    (prompt: string) => {
+      const trimmed = prompt.trim();
+      if (!trimmed || inFlight.current) return Promise.resolve();
+
+      const history: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
+      return run(history, messages);
+    },
+    [messages, run],
+  );
+
+  /**
+   * Replaces a user message and everything after it.
+   *
+   * Editing an earlier question invalidates the replies that followed it - they
+   * answered the old wording. Keeping them would let the model see an answer
+   * that no longer matches the question above it.
+   */
+  const editAndResend = useCallback(
+    (index: number, nextContent: string) => {
+      const trimmed = nextContent.trim();
+      if (!trimmed || inFlight.current) return Promise.resolve();
+
+      const history: ChatMessage[] = [
+        ...messages.slice(0, index),
+        { role: "user", content: trimmed },
+      ];
+
+      // The bookkeeping maps are keyed by position, so anything at or after the
+      // edited message has to go too.
+      setReasoningByIndex((current) => dropFrom(current, index));
+
+      return run(history, messages);
+    },
+    [messages, run],
+  );
+
+  /**
+   * Asks the last question again.
+   *
+   * The reply being retried is dropped first, so the model is not asked to
+   * answer a question that already has an answer directly below it.
+   */
+  const retry = useCallback(
+    (assistantIndex: number) => {
+      if (inFlight.current) return Promise.resolve();
+
+      // The question is the user message immediately before the reply.
+      const questionIndex = assistantIndex - 1;
+      if (questionIndex < 0 || messages[questionIndex]?.role !== "user") {
+        return Promise.resolve();
+      }
+
+      const history = messages.slice(0, assistantIndex);
+      setReasoningByIndex((current) => dropFrom(current, assistantIndex));
+
+      return run(history, messages);
+    },
+    [messages, run],
   );
 
   const reset = useCallback(() => {
@@ -168,7 +233,29 @@ export function useAiChat(): AiChatState {
     busy,
     error,
     ask,
+    editAndResend,
+    retry,
     reset,
     dismissError,
   };
+}
+
+/**
+ * Drops every entry at or after `from`.
+ *
+ * This is what keeps the reasoning map aligned with the message list after an
+ * edit or a retry. Without it a stale entry would attach an old thought trace to
+ * a new reply, which reads as the model thinking about something it was never
+ * asked.
+ *
+ * `Number(key)` matters: object keys are strings, so a lexical comparison would
+ * put `"10"` below `"3"` and keep entries that should have gone.
+ */
+function dropFrom<T>(record: Record<number, T>, from: number): Record<number, T> {
+  const next: Record<number, T> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const index = Number(key);
+    if (index < from) next[index] = value;
+  }
+  return next;
 }

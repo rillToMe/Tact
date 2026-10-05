@@ -262,6 +262,8 @@ export function SearchWindow() {
             reasoningByIndex={chat.reasoningByIndex}
             busy={chat.busy}
             error={chat.error}
+            onEdit={chat.editAndResend}
+            onRetry={chat.retry}
           />
 
           <div className="flex h-8 shrink-0 items-center justify-between border-t border-line px-4">

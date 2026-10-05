@@ -12,6 +12,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-clipboard-manager": "^2.4.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10",

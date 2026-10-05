@@ -1,7 +1,10 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "../../types";
+import { cn } from "../../lib/cn";
 import { useStickToBottom } from "../../hooks/useStickToBottom";
 import { Markdown } from "./Markdown";
 import { ThoughtLine } from "./ThoughtLine";
+import { MessageActions, UserActions } from "./MessageActions";
 import { ChevronIcon } from "../../components/icons";
 
 interface AiConversationProps {
@@ -14,6 +17,8 @@ interface AiConversationProps {
   reasoningByIndex: Record<number, string>;
   busy: boolean;
   error: string | null;
+  onEdit: (index: number, content: string) => void;
+  onRetry: (assistantIndex: number) => void;
 }
 
 /**
@@ -30,12 +35,19 @@ export function AiConversation({
   reasoningByIndex,
   busy,
   error,
+  onEdit,
+  onRetry,
 }: AiConversationProps) {
   // Follows the reply as it grows, but only while the user is already at the
   // bottom. See the hook: an unconditional scroll-to-bottom made the transcript
   // impossible to scroll, because streaming updates every frame and overwrote
   // every attempt to move up.
   const { scrollRef, pinned, jumpToBottom } = useStickToBottom<HTMLDivElement>();
+
+  // Which user message is open for editing, if any. Editing is exclusive: two
+  // open editors would let the user build a conversation from two places at
+  // once, which the history cannot represent.
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   const empty = messages.length === 0 && !streaming && !busy && !error;
 
@@ -55,20 +67,39 @@ export function AiConversation({
           </p>
         ) : (
           <div className="flex flex-col gap-4">
-            {messages.map((message, index) => (
-              <div key={index} className="flex flex-col gap-1.5">
-                {/* Reasoning for a finished turn stays available, collapsed, so
-                    the answer can still be checked against the thinking. */}
-                {message.role === "assistant" && reasoningByIndex[index] && (
-                  <ThoughtLine text={reasoningByIndex[index]} working={false} />
-                )}
-                {message.role === "user" ? (
-                  <UserMessage content={message.content} />
-                ) : (
+            {messages.map((message, index) => {
+              if (message.role === "user") {
+                return (
+                  <UserMessage
+                    key={index}
+                    content={message.content}
+                    editing={editingIndex === index}
+                    disabled={busy}
+                    onStartEdit={() => setEditingIndex(index)}
+                    onCancelEdit={() => setEditingIndex(null)}
+                    onSubmit={(next) => {
+                      setEditingIndex(null);
+                      onEdit(index, next);
+                    }}
+                  />
+                );
+              }
+
+              return (
+                <div key={index} className="group/message flex flex-col gap-1.5">
+                  {/* Reasoning for a finished turn stays available, collapsed,
+                      so the answer can still be checked against the thinking. */}
+                  {reasoningByIndex[index] && (
+                    <ThoughtLine text={reasoningByIndex[index]} working={false} />
+                  )}
                   <AssistantMessage content={message.content} />
-                )}
-              </div>
-            ))}
+                  <MessageActions
+                    content={message.content}
+                    onRetry={() => onRetry(index)}
+                  />
+                </div>
+              );
+            })}
 
             {/* The turn in flight: reasoning first, then the reply as it lands.
                 The line shows while waiting for the first token, which is a useful
@@ -111,18 +142,127 @@ export function AiConversation({
   );
 }
 
+interface UserMessageProps {
+  content: string;
+  editing: boolean;
+  disabled: boolean;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSubmit: (next: string) => void;
+}
+
 /**
  * What the user typed, as a bubble.
  *
  * The bubble is what separates the user's own words from the answer: it is a
  * quotation of them, not part of the document being produced.
+ *
+ * The edit affordance sits below the bubble rather than floating on it, so the
+ * bubble keeps the same shape whether or not it is hovered - a control that
+ * shifts the text it belongs to is worse than one that is always in the same
+ * place.
  */
-function UserMessage({ content }: { content: string }) {
+function UserMessage({
+  content,
+  editing,
+  disabled,
+  onStartEdit,
+  onCancelEdit,
+  onSubmit,
+}: UserMessageProps) {
+  const [draft, setDraft] = useState(content);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Reset the draft whenever the message itself changes, so reopening the
+  // editor after an edit shows the current text rather than a stale draft.
+  const [seeded, setSeeded] = useState(content);
+  if (seeded !== content) {
+    setSeeded(content);
+    setDraft(content);
+  }
+
+  const autoGrow = useCallback(() => {
+    const node = inputRef.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${Math.min(node.scrollHeight, 200)}px`;
+  }, []);
+
+  useEffect(() => {
+    if (!editing) return;
+    autoGrow();
+    const node = inputRef.current;
+    node?.focus();
+    node?.setSelectionRange(node.value.length, node.value.length);
+  }, [editing, autoGrow]);
+
+  if (editing) {
+    return (
+      <div className="flex justify-end">
+        <div className="flex w-full max-w-[85%] flex-col gap-1.5">
+          <textarea
+            ref={inputRef}
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              autoGrow();
+            }}
+            onKeyDown={(event) => {
+              // Escape abandons the edit, Enter sends. Shift+Enter is left to
+              // insert a newline, matching the main input.
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onCancelEdit();
+                return;
+              }
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                if (draft.trim() && !disabled) onSubmit(draft);
+              }
+            }}
+            aria-label="Edit message"
+            className={cn(
+              "w-full resize-none rounded-control border border-line-strong bg-surface-elevated",
+              "px-2.5 py-1.5 text-[12.5px] leading-5 text-fg",
+              "focus:border-accent focus:outline-none",
+            )}
+            rows={1}
+          />
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="focus-ring rounded-chip px-2 py-0.5 text-[11.5px] text-fg-subtle transition-colors duration-150 hover:bg-surface-hover hover:text-fg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onSubmit(draft)}
+              disabled={!draft.trim() || disabled}
+              className={cn(
+                "focus-ring rounded-chip px-2 py-0.5 text-[11.5px] font-medium transition-colors duration-150",
+                !draft.trim() || disabled
+                  ? "cursor-not-allowed text-fg-subtle"
+                  : "bg-accent-soft text-accent hover:bg-accent hover:text-white",
+              )}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex justify-end">
+    <div className="group/message flex flex-col items-end gap-1">
       <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-control bg-accent-soft px-2.5 py-1.5 text-[12.5px] leading-5 text-fg">
         {content}
       </div>
+
+      <UserActions content={content} onEdit={onStartEdit} disabled={disabled} />
     </div>
   );
 }
