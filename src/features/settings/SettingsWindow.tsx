@@ -10,6 +10,7 @@ import {
   SegmentedControl,
   SettingsGroup,
   SettingsRow,
+  Switch,
 } from "../../components/ui";
 import { Select } from "../../components/Select";
 import { ShortcutRecorder } from "./ShortcutRecorder";
@@ -34,11 +35,30 @@ export function SettingsWindow() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [page, setPage] = useState<Page>("general");
 
+  // `null` until Windows reports the real state. The switch is disabled until
+  // then, because showing it as "off" before it is known would be a guess.
+  const [startupEnabled, setStartupEnabled] = useState<boolean | null>(null);
+  const [startupError, setStartupError] = useState<string | null>(null);
+
   useEffect(() => {
     ipc.listSearchEngines().then(setEngines).catch(() => setEngines([]));
     // The bang list is reference material; if it fails to load the row simply
     // shows nothing rather than blocking the page.
     ipc.listBangs().then(setBangs).catch(() => setBangs([]));
+  }, []);
+
+  // Read from Windows rather than from the settings payload: the user can
+  // change the startup entry from Task Manager, so the stored value can be
+  // stale.
+  useEffect(() => {
+    ipc
+      .getStartupEnabled()
+      .then(setStartupEnabled)
+      .catch((cause) => {
+        setStartupError(toAppError(cause).message);
+        // Leave it null so the switch stays disabled rather than showing a
+        // state that was never confirmed.
+      });
   }, []);
 
   // Escape closes settings, matching the search window. The recorder captures
@@ -139,6 +159,44 @@ export function SettingsWindow() {
                 {shortcutError && (
                   <p role="alert" className="px-1 py-2 text-[11.5px] leading-4 text-danger">
                     {shortcutError}
+                  </p>
+                )}
+
+                <SettingsRow
+                  label="Start with Windows"
+                  description={
+                    startupEnabled === null
+                      ? "Checking Windows..."
+                      : "Launch Search Short when you sign in."
+                  }
+                  control={
+                    <Switch
+                      checked={startupEnabled ?? false}
+                      onChange={(next) => {
+                        setStartupError(null);
+                        void ipc
+                          .setStartupEnabled(next)
+                          .then(setStartupEnabled)
+                          .catch((cause) => {
+                            setStartupError(toAppError(cause).message);
+                            // Re-read rather than assuming: the failure may have
+                            // left the registration in the other state.
+                            void ipc
+                              .getStartupEnabled()
+                              .then(setStartupEnabled)
+                              .catch(() => undefined);
+                          });
+                      }}
+                      label="Start with Windows"
+                      // Nothing to toggle until Windows has reported its state,
+                      // and toggling blind could write the wrong value.
+                      disabled={startupEnabled === null}
+                    />
+                  }
+                />
+                {startupError && (
+                  <p role="alert" className="px-1 py-2 text-[11.5px] leading-4 text-danger">
+                    {startupError}
                   </p>
                 )}
               </SettingsGroup>

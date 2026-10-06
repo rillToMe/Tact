@@ -45,6 +45,21 @@ export const ipc = {
     return invoke("list_bangs");
   },
 
+  /**
+   * Whether the app starts with Windows.
+   *
+   * Read live from Windows rather than from the stored setting: the user can
+   * change it from Task Manager while the app is closed.
+   */
+  async getStartupEnabled(): Promise<boolean> {
+    return invoke("get_startup_enabled");
+  },
+
+  /** Registers or removes the app from Windows startup. */
+  async setStartupEnabled(enabled: boolean): Promise<boolean> {
+    return invoke("set_startup_enabled", { enabled });
+  },
+
   async getShortcutStatus(): Promise<ShortcutStatus> {
     return invoke("get_shortcut_status");
   },

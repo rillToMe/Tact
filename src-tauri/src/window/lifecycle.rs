@@ -7,6 +7,9 @@ use tauri::{
 
 use crate::error::{AppError, AppResult, Ctx, ErrorCode};
 
+use super::creation::ensure_settings_window;
+use super::memory::{MemoryTarget, set_target};
+
 pub const SEARCH_WINDOW: &str = "search";
 pub const SETTINGS_WINDOW: &str = "settings";
 
@@ -40,7 +43,7 @@ fn get_window(app: &AppHandle, label: &str) -> AppResult<WebviewWindow> {
 }
 
 /// Shows a window, restores it if minimized, and gives it keyboard focus.
-fn reveal(window: &WebviewWindow) -> AppResult<()> {
+pub fn reveal(window: &WebviewWindow) -> AppResult<()> {
     if window.is_minimized().unwrap_or(false) {
         window
             .unminimize()
@@ -78,6 +81,10 @@ pub fn show_search(app: &AppHandle) -> AppResult<()> {
         log::warn!("search window could not be reset to its collapsed size: {error}");
     }
 
+    // Back to full memory *before* it is on screen, so the first frame the user
+    // sees is not competing with the runtime trimming in the background.
+    set_target(&window, MemoryTarget::Active);
+
     SEARCH_WAS_FOCUSED.store(false, Ordering::Relaxed);
     reveal(&window)?;
     window
@@ -91,6 +98,10 @@ pub fn hide_search(app: &AppHandle) -> AppResult<()> {
     window
         .hide()
         .ctx("hide search window", "The window could not be hidden.")?;
+
+    // Hidden is exactly the state this is for: nothing on screen is waiting on
+    // this webview, so the runtime can hold less of it.
+    set_target(&window, MemoryTarget::Inactive);
     Ok(())
 }
 
@@ -108,18 +119,43 @@ pub fn toggle_search(app: &AppHandle) -> AppResult<()> {
     }
 }
 
+/// Shows Settings, building it first if this is the first time.
+///
+/// A window that already exists is loaded and can be revealed immediately. A
+/// newly built one is left to reveal itself from its page-load callback, so it
+/// never flashes an unpainted frame; see `creation::ensure_settings_window`.
+///
+/// A settings window the user has hidden stays alive for the rest of the
+/// session and is reused, so reopening it is instant. That is the same trade the
+/// search window makes, and it costs nothing at startup because the window is
+/// not built until it is first asked for.
 pub fn show_settings(app: &AppHandle) -> AppResult<()> {
     let _ = hide_search(app);
-    let window = get_window(app, SETTINGS_WINDOW)?;
+    let (window, created) = ensure_settings_window(app)?;
+
+    set_target(&window, MemoryTarget::Active);
+
+    if created {
+        return Ok(());
+    }
+
     reveal(&window)
 }
 
 pub fn hide_settings(app: &AppHandle) -> AppResult<()> {
-    let window = get_window(app, SETTINGS_WINDOW)?;
+    // Not `get_window`: hiding a window that was never built is a no-op, not a
+    // failure. The frontend calls this on Escape, and with lazy creation that
+    // can arrive from a page whose window no longer exists.
+    let Some(window) = app.get_webview_window(SETTINGS_WINDOW) else {
+        return Ok(());
+    };
+
     window.hide().ctx(
         "hide settings window",
         "The settings window could not be hidden.",
     )?;
+
+    set_target(&window, MemoryTarget::Inactive);
     Ok(())
 }
 
@@ -208,6 +244,13 @@ pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
             let _ = window.hide();
+
+            // A closed window is an off-screen one, so the same idle treatment
+            // applies. Looked up as a `WebviewWindow` because the memory target
+            // needs the webview, which `tauri::Window` does not carry.
+            if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                set_target(&webview, MemoryTarget::Inactive);
+            }
         }
         WindowEvent::Focused(true) if window.label() == SEARCH_WINDOW => {
             SEARCH_WAS_FOCUSED.store(true, Ordering::Relaxed);
@@ -245,6 +288,12 @@ fn confirm_blur_then_hide(app: AppHandle) {
         SEARCH_WAS_FOCUSED.store(false, Ordering::Relaxed);
         if let Err(error) = window.hide() {
             log::warn!("search window could not be hidden after losing focus: {error}");
+            return;
         }
+
+        // Same as `hide_search`: the window is now off screen, so the runtime is
+        // free to hold less of it. Reached separately because losing focus is
+        // not routed through `hide_search`.
+        set_target(&window, MemoryTarget::Inactive);
     });
 }

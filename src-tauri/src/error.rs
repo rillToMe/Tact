@@ -18,6 +18,8 @@ pub enum ErrorCode {
     AiKeyUnavailable,
     /// The provider was reached but refused, or could not be reached at all.
     AiRequestFailed,
+    /// The Windows startup registration could not be read or changed.
+    StartupUnavailable,
 }
 
 /// The only error shape that ever crosses the IPC boundary.

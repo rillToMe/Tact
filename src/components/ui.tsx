@@ -106,6 +106,49 @@ export function SettingsRow({ label, description, htmlFor, control }: SettingsRo
   );
 }
 
+interface SwitchProps {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  /** Accessible name. The visible label lives in the surrounding row. */
+  label: string;
+  disabled?: boolean;
+}
+
+/**
+ * An on/off switch.
+ *
+ * A `role="switch"` button rather than a checkbox: the state is a mode, not a
+ * selection, and a switch announces itself correctly as on or off. The visual
+ * state is carried by both the track colour and the knob position, so it does
+ * not rely on colour alone.
+ */
+export function Switch({ checked, onChange, label, disabled }: SwitchProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "focus-ring relative h-[22px] w-[38px] shrink-0 rounded-full",
+        "transition-colors duration-150",
+        checked ? "bg-accent" : "border border-line bg-surface-sunken",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute top-1/2 size-[16px] -translate-y-1/2 rounded-full bg-white",
+          "shadow-[0_1px_2px_rgb(0_0_0/0.3)] transition-[left] duration-150",
+          checked ? "left-[19px]" : "left-[3px]",
+        )}
+      />
+    </button>
+  );
+}
+
 interface SegmentedControlProps<T extends string> {
   name: string;
   value: T;

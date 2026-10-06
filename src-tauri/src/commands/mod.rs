@@ -62,6 +62,16 @@ pub fn update_settings(
         return Err(error);
     }
 
+    // `launch_at_login` is owned by `set_startup_enabled`, which changes the
+    // Windows registration and the stored value together. This command carries
+    // the whole settings object back, so a value arriving here would be written
+    // straight to disk without touching the registry - leaving the two
+    // disagreeing. The stored value is carried over instead.
+    let next = Settings {
+        launch_at_login: previous.launch_at_login,
+        ..next
+    };
+
     store::save(&app, &next)?;
     state.replace(next.clone());
 
@@ -79,6 +89,43 @@ pub fn update_settings(
 #[tauri::command]
 pub fn list_search_engines() -> &'static [SearchEngine] {
     engine::all()
+}
+
+/// Whether the app is registered to start with Windows.
+///
+/// Read live from Windows rather than from the stored setting, because the user
+/// can change it from Task Manager while the app is closed.
+#[tauri::command]
+pub fn get_startup_enabled(app: AppHandle) -> AppResult<bool> {
+    crate::startup::is_enabled(&app)
+}
+
+/// Registers or removes the app from Windows startup, and stores the preference.
+///
+/// The registration is attempted first: if Windows refuses, nothing is written,
+/// so the stored value can never claim something that is not true.
+#[tauri::command]
+pub fn set_startup_enabled(
+    app: AppHandle,
+    state: State<'_, SettingsState>,
+    enabled: bool,
+) -> AppResult<bool> {
+    crate::startup::set_enabled(&app, enabled)?;
+
+    let mut next = state.snapshot();
+    next.launch_at_login = enabled;
+    store::save(&app, &next)?;
+    state.replace(next.clone());
+
+    app.emit(EVENT_SETTINGS_CHANGED, &next).map_err(|error| {
+        log::error!("settings changed event could not be emitted: {error}");
+        AppError::new(
+            ErrorCode::Internal,
+            "The setting was saved but the windows could not be updated.",
+        )
+    })?;
+
+    Ok(enabled)
 }
 
 /// The `!bang` shortcuts, for the settings page and the search bar's hint.

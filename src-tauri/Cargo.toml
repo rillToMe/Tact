@@ -50,3 +50,17 @@ futures-util = "0.3"
 # Windows is `windows-native-keyring-store`.
 keyring = "4.2.0"
 tauri-plugin-clipboard-manager = "2"
+tauri-plugin-autostart = "2"
+
+# Windows-only: the WebView2 low-memory target level used when a window is
+# hidden. Both are already in the tree transitively (through tauri -> wry ->
+# webview2-com), so this adds no new code to build - it only names the crates
+# this app calls directly rather than relying on a transitive version.
+#
+# `webview2-com-sys` generates its bindings against `windows-core` 0.62, and
+# the two must agree: a second copy of `windows-core` would make the generated
+# `ICoreWebView2_19` implement `Interface` for the wrong crate and the cast
+# would not compile.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39.1"
+windows-core = "0.62"

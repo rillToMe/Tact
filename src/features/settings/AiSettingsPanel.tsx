@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cn } from "../../lib/cn";
 import { ipc, toAppError } from "../../lib/ipc";
 import { formatModeKey } from "../../lib/shortcut";
-import { Kbd, SettingsGroup, SettingsRow } from "../../components/ui";
+import { Kbd, SettingsGroup, SettingsRow, Switch } from "../../components/ui";
 import { CheckIcon, CloseIcon } from "../../components/icons";
 import { ShortcutDialog } from "../../components/ShortcutDialog";
 import type { AiSettings } from "../../types";
@@ -256,32 +256,17 @@ export function AiSettingsPanel({ settings, apiKeySet, onPatch }: AiSettingsPane
   return (
     <>
       <SettingsGroup title="AI chat">
-        <SettingsRow
-          label="Enable AI chat"
-          description="Adds an AI mode to the search window."
-          control={
-            <button
-              type="button"
-              role="switch"
-              aria-checked={settings.enabled}
-              aria-label="Enable AI chat"
-              onClick={() => onPatch({ enabled: !settings.enabled })}
-              className={cn(
-                "focus-ring relative h-[22px] w-[38px] shrink-0 rounded-full",
-                "transition-colors duration-150",
-                settings.enabled ? "bg-accent" : "bg-surface-sunken border border-line",
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute top-1/2 size-[16px] -translate-y-1/2 rounded-full bg-white",
-                  "shadow-[0_1px_2px_rgb(0_0_0/0.3)] transition-[left] duration-150",
-                  settings.enabled ? "left-[19px]" : "left-[3px]",
-                )}
+          <SettingsRow
+            label="Enable AI chat"
+            description="Adds an AI mode to the search window."
+            control={
+              <Switch
+                checked={settings.enabled}
+                onChange={(enabled) => onPatch({ enabled })}
+                label="Enable AI chat"
               />
-            </button>
-          }
-        />
+            }
+          />
       </SettingsGroup>
 
       {/* Everything below is meaningless while AI is off, so it is hidden

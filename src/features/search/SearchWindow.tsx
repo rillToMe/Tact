@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ipc, toAppError } from "../../lib/ipc";
 import { useSearchOpened } from "../../hooks/useSettings";
 import { useAiChat } from "../../hooks/useAiChat";
@@ -8,7 +8,7 @@ import { parseQuery } from "../../lib/search";
 import { SearchIcon, SlidersIcon, SparkleIcon } from "../../components/icons";
 import { IconButton, Kbd } from "../../components/ui";
 import { cn } from "../../lib/cn";
-import { AiConversation } from "./AiConversation";
+import { AiConversationLazy, preloadAiConversation } from "./aiLoader";
 
 export function SearchWindow() {
   const [query, setQuery] = useState("");
@@ -85,6 +85,14 @@ export function SearchWindow() {
   // on toggle alone would show a large empty panel when the user changed their
   // mind and switched back.
   const showConversation = aiMode && aiAvailable;
+
+  // Warm the AI renderer once the window is up and AI is on, so switching modes
+  // does not have to wait for it. See `aiLoader`: this is deliberately tied to
+  // AI being enabled rather than to startup, and it never runs when the feature
+  // is off.
+  useEffect(() => {
+    if (aiAvailable) preloadAiConversation();
+  }, [aiAvailable]);
 
   useEffect(() => {
     void ipc.setSearchExpanded(showConversation).catch((cause) => {
@@ -332,16 +340,23 @@ export function SearchWindow() {
 
       {showConversation && (
         <>
-          <AiConversation
-            messages={chat.messages}
-            streaming={chat.streaming}
-            reasoning={chat.reasoning}
-            reasoningByIndex={chat.reasoningByIndex}
-            busy={chat.busy}
-            error={chat.error}
-            onEdit={chat.editAndResend}
-            onRetry={chat.retry}
-          />
+          {/* The fallback is an empty area of the same size rather than a
+              spinner: the chunk is small and normally preloaded, so a spinner
+              would usually flash for one frame and read as a glitch. If it does
+              have to wait, a blank transcript is the least distracting way to
+              do it. */}
+          <Suspense fallback={<div className="min-h-0 flex-1" />}>
+            <AiConversationLazy
+              messages={chat.messages}
+              streaming={chat.streaming}
+              reasoning={chat.reasoning}
+              reasoningByIndex={chat.reasoningByIndex}
+              busy={chat.busy}
+              error={chat.error}
+              onEdit={chat.editAndResend}
+              onRetry={chat.retry}
+            />
+          </Suspense>
 
           <div className="flex h-8 shrink-0 items-center justify-between border-t border-line px-4">
             <button

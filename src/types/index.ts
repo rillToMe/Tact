@@ -56,7 +56,8 @@ export type ErrorCode =
   | "aiNotConfigured"
   | "aiKeyMissing"
   | "aiKeyUnavailable"
-  | "aiRequestFailed";
+  | "aiRequestFailed"
+  | "startupUnavailable";
 
 export interface AppError {
   code: ErrorCode;

@@ -105,7 +105,35 @@ in `src-tauri/src/search/engine.rs`, plus its icon in
   shows each engine's logo, and the active engine's logo appears in the search
   window. Adding another engine is one entry in the registry (see below).
 - **Theme** — System, Light, or Dark.
+- **Start with Windows** — off by default. Registers the app under
+  `HKCU\...\CurrentVersion\Run`, so no administrator rights are needed.
 - **AI chat** — its own settings page. Off by default.
+
+### Start with Windows
+
+The switch reads and writes the real Windows registration rather than a stored
+boolean, so it cannot show a state that disagrees with what Windows will do.
+
+The two can still drift apart while the app is closed — the entry can be
+switched off from Task Manager's Startup tab, removed by an uninstall, or left
+pointing at a path that no longer exists. On launch the stored preference and the
+real registration are reconciled:
+
+| Preference | Windows | Result |
+| --- | --- | --- |
+| on | on | left alone, no needless registry write |
+| on | off | re-registered |
+| off | on | removed as a leftover |
+
+The middle row is a judgement call worth stating. The plugin reports
+`is_registered() && is_task_manager_enabled()`, which collapses "never
+registered" and "switched off in Task Manager" into the same `false` — there is
+no way to tell them apart. The stored preference wins, because that is the
+recoverable direction: the worst case is an entry the user switches off again,
+whereas trusting the empty registry would silently undo a setting they turned on
+and leave them wondering why it kept reverting.
+
+Removing the entry from the app also removes it from Task Manager's Startup list.
 
 ## AI chat
 
@@ -252,9 +280,10 @@ src/                          # React + TypeScript
 src-tauri/src/                # Rust
 ├── ai/                       # AI settings, streaming chat client, key storage
 ├── commands/                 # the IPC surface (the only #[tauri::command]s)
-├── search/                   # search-engine registry and URL building
+├── search/                   # search-engine registry, bangs, URL building
 ├── settings/                 # settings model + persistent store
 ├── shortcut/                 # global shortcut ownership and lifecycle
+├── startup/                  # Windows startup registration + reconciliation
 ├── system/                   # opening URLs, tray icon
 └── window/                   # window lifecycle and focus rules
 ```
